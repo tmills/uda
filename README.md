@@ -14,10 +14,20 @@ so that all features possible can be found later.
 to get 50 most frequent features.
 > cat source+target-training.liblinear | ./scripts/extract_pivots_by_frequency_liblinear.sh > source+target.pivots.txt
 
+at this point it is sometimes helpful to do a sanity check that your source and target files have similar pivots if you run them independently. This will assure you that your step 1 outputs are indeed using the same encoder.
+
 4) Build training data files for each pivot feature classification problem with build_pivot_training_data.pl:
-> perl scripts/build_pivot_training_data.pl source-training.liblinear target-eval.liblinear source+target.pivots.txt pivot_data/source+target
+> perl scripts/build_pivot_training_data.pl source+target.pivots.txt source-training.liblinear target-eval.liblinear  pivot_data/source+target
 
 Data will be written to the output folder you specify, here pivot_data/source+target.
+
+Before proceeding any further, make sure you have the python requirements
+in the requirements.txt file installed. I have done this in a virtual environment
+as follows:
+
+* virtualenv env
+* source env/bin/activate
+* pip install -r requirements.txt
 
 5) Train pivot classifiers with learn_scl_weights.py. This step performs an
 SVD so it may require > 8GB RAM for large feature/instance sets.

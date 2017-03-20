@@ -59,7 +59,7 @@ sub get_max_feature_index{
 }
 
 if ($#ARGV != 3){
-  print STDERR "Three required arguments: <pivot file> <source data file> <target data file> <output directory>\n";
+  print STDERR "Four required arguments: <pivot file> <source data file> <target data file> <output directory>\n";
   exit
 }
 

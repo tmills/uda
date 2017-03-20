@@ -37,15 +37,17 @@ def main(args):
 
         weight_matrix[:,ind] = clf.coef_
 
-    full_out = open('theta_full.pkl', 'wb')
-    
+    full_out = open(join(data_dir, 'theta_full.pkl'), 'wb')
+    pickle.dump(weight_matrix, full_out)
+    full_out.close()
+
     ## Compute svd to get low-dimensional projection
     [U, s, Vh] = svd(weight_matrix, full_matrices=True)
     ## U is n x n. Take subset of rows to get d x n, then transpose to get n x d
     theta = U[0:proj_dim, :].transpose()
     ## theta is now an n x d projection from the non-pivot feature space into
     ## the d-dimensional correspondence space.
-    theta_out = open('theta_svd.pkl', 'wb')
+    theta_out = open(join(data_dir, 'theta_svd.pkl'), 'wb')
     pickle.dump(theta, theta_out)
     theta_out.close()
 

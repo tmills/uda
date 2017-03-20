@@ -12,11 +12,12 @@ def main(args):
 
     print("Reading input data from %s" % (args[0]))
     X_train, y_train = load_svmlight_file(args[0])
-    X_train = X_train.tolil()
+    nopivot_X_train = X_train.tolil()
+    pivot_X_train = np.matrix(np.zeros(X_train.shape))
     (num_instances, num_feats) = X_train.shape
     print("  Data has %d instances and %d features" % (num_instances, num_feats))
 
-    print("Reading pivot index file into a dictionary and zero-ing out pivot features in train")
+    print("Reading pivot index file into a dictionary and creating pivot-only and nopivot matrices")
     ## zero out pivot features:
     pivots = {}
     f = open(args[2], 'r')
@@ -24,8 +25,17 @@ def main(args):
         line.rstrip()
         pivot = int(line)
         pivots[pivot] = 1
-        X_train[:,pivot] = 0
+        ## Before we zero out the nopivot, copy it to the pivot
+        pivot_X_train[:,pivot] += nopivot_X_train[:,pivot]
+        nopivot_X_train[:,pivot] = 0
     f.close()
+
+    print("Creating non-pivot-only feature representation in %s" % (args[3]))
+    dump_svmlight_file(nopivot_X_train, y_train, join(args[3], 'nonpivot-only.liblinear'))
+
+    ## pivot features only:
+    print("Creating pivot-only feature representation in %s" % (args[3]))
+    dump_svmlight_file(pivot_X_train, y_train, join(args[3], 'pivot-only.liblinear'))
 
     print("Reading pickled transform matrix file")
     ## Transform space using learned matrix
@@ -35,27 +45,22 @@ def main(args):
     print("  Transformation matrix has dimensions (%d,%d)" % theta.shape)
 
     print("Transforming training data into SVD space")
-    new_space = X_train * theta
+    new_space = nopivot_X_train * theta
 
     print('Creating "new" feature representation in %s' % (args[3]))
-    new_out = open(join(args[3], 'new_model.liblinear'), 'w')
-    for row_index in range(new_space.shape[0]):
-        new_out.write("%d" % y_train[row_index])
-        for col_index in range(new_space.shape[1]):
-            new_out.write(" %d:%f" % (col_index+1, new_space[row_index,col_index]))
-        new_out.write("\n")
-    new_out.close()
+    dump_svmlight_file(new_space, y_train, join(args[3], 'new.liblinear'))
 
-    ## pivot features only:
-    print("Creating pivot-only feature representation in %s" % (args[3]))
-    #pivot_only_out = open(join(args[3], 'pivot-only.liblinear'), 'w')
-    X_train, y_train = load_svmlight_file(args[0])
-    pivot_X_train = np.matrix(np.zeros(X_train.shape))
-    ## zero out all but pivot features
-    for pivot in pivots.keys():
-        pivot_X_train[:, pivot] += X_train[:, pivot]
+    print("Creating all+new feature representation in %s" % (args[3]))
+    all_plus_new = np.matrix(np.zeros((X_train.shape[0], X_train.shape[1] + new_space.shape[1])))
+    all_plus_new[:, :X_train.shape[1]] += X_train
+    all_plus_new[:, X_train.shape[1]:] += new_space
+    dump_svmlight_file(all_plus_new, y_train, join(args[3], 'all_plus_new.liblinear'))
 
-    dump_svmlight_file(pivot_X_train, y_train, join(args[3], 'pivot-only.liblinear'))
+    print("Creating pivot_plus_new feature representation in %s" % (args[3]))
+    pivot_plus_new = np.matrix(np.zeros((pivot_X_train.shape[0], pivot_X_train.shape[1] + new_space.shape[1])))
+    pivot_plus_new[:, :pivot_X_train.shape[1]] += pivot_X_train
+    pivot_plus_new[:, pivot_X_train.shape[1]:] += new_space
+    dump_svmlight_file(pivot_plus_new, y_train, join(args[3], 'pivot_plus_new.liblinear'))
 
 
 if __name__ == '__main__':
