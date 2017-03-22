@@ -6,6 +6,8 @@
 Use the new EncoderReusingDataWriter after the first run so that all the feature
 spaces have the same encoding, and write the "source" domain training file first
 so that all features possible can be found later.
+1b) Re-index all these files so that they are indexed at 0 to make everything after this cleaner.
+(sklearns functions assume index=0 and this way "feature numbers" are the same as array indices in the code)
 
 2) Cat together source training with target eval liblinear files
 > source+target-training.liblinear
@@ -41,4 +43,4 @@ This step will write the feature projection matrix as a pickled file called thet
 Transformed datasets will be written to the directory in the last argument.
 
 7) Evaluate the different configurations with evaluate_scl.py:
-> python scripts/evaluate_scl.py source-training.liblinear target-eval.liblinear
+> python scripts/evaluate_scl.py source-training.liblinear target-eval.liblinear pivot_data/source+target/

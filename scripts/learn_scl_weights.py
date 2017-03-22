@@ -28,7 +28,7 @@ def main(args):
         if weight_matrix is None:
             num_feats = X_train.shape[1]
             weight_matrix = np.zeros((num_feats, len(files)))
-        print("Training classifier for pivot file %s with dimensions %s" % (f, str(weight_matrix.shape)))
+        print("Training classifier for pivot file %s with dimensions %s" % (f, str(X_train.shape)))
         clf = SGDClassifier(loss="modified_huber", penalty='none', fit_intercept=False)
         clf.fit(X_train, y_train)
         coefs_out = open(join(data_dir, basename(f).replace('liblinear','model') ), 'wb')
