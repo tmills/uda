@@ -2,6 +2,11 @@
 
 use strict;
 
+## FIXME - this is really slow for the seed + mipacq case because mipacq is
+## a lot bigger and so has a larger vocab and more BOW features, and thus
+## doble the feature space. So then we manually delete out all those features
+## when we write the liblinear file which takes forever.
+## Probably the fix is to rewrite this in python.
 sub write_instances_for_file{
   my ($pivot, $pivots_hash_pointer, $fn, $fh, $max_index) = @_;
   my %pivots = %{$pivots_hash_pointer};
@@ -80,9 +85,9 @@ for my $pivot (keys %pivots){
   print "Writing training file for $pivot\n";
   open my $pivot_out, " > $ARGV[3]/pivot_$pivot-training.liblinear";
 
-  print "Writing for seed file:\n";
+  print "Writing for source file:\n";
   write_instances_for_file($pivot, \%pivots, $ARGV[1], $pivot_out, $max_index);
-  print "Writing for strat file:\n";
+  print "Writing for target file:\n";
   write_instances_for_file($pivot, \%pivots, $ARGV[2], $pivot_out, $max_index);
 
   close $pivot_out;

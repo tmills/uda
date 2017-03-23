@@ -1,8 +1,9 @@
 #!/usr/bin/python
-from os.path import join
+from os.path import join,exists
 import numpy as np
 import pickle
 from sklearn.datasets import load_svmlight_file, dump_svmlight_file
+import os
 import sys
 
 def main(args):
@@ -16,6 +17,11 @@ def main(args):
     pivot_X_train = np.matrix(np.zeros(X_train.shape))
     (num_instances, num_feats) = X_train.shape
     print("  Data has %d instances and %d features" % (num_instances, num_feats))
+
+    out_dir = args[3]
+    if not exists(out_dir):
+        sys.stderr.write("Creating non-existent output directory.\n")
+        os.makedirs(out_dir)
 
     print("Reading pivot index file into a dictionary and creating pivot-only and nopivot matrices")
     ## zero out pivot features:

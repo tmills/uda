@@ -8,6 +8,7 @@ spaces have the same encoding, and write the "source" domain training file first
 so that all features possible can be found later.
 1b) Re-index all these files so that they are indexed at 0 to make everything after this cleaner.
 (sklearns functions assume index=0 and this way "feature numbers" are the same as array indices in the code)
+> python scripts/reindex_liblinear.py source-training.liblinear
 
 2) Cat together source training with target eval liblinear files
 > source+target-training.liblinear

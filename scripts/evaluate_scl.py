@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import numpy as np
 import pickle
+import scipy.sparse
 import sys
 from os.path import isfile, join, basename
 from sklearn import svm
@@ -29,7 +30,16 @@ def main(args):
     num_instances, num_feats = X_train.shape
 
     ## Read test and trim feature space to fit training if necessary
-    X_test, y_test = load_svmlight_file(args[1], n_features=num_feats)
+    X_test, y_test = load_svmlight_file(args[1])
+    num_test_instances, num_test_feats = X_test.shape
+    if num_test_feats < num_feats:
+        ## Expand X_test
+        #print("Not sure I need to do anything here.")
+        X_test_array = X_test.toarray()
+        X_test = scipy.sparse.csr_matrix(np.append(X_test_array, np.zeros((num_test_instances, num_feats-num_test_feats)), axis=1))
+    elif num_test_feats > num_feats:
+        ## Truncate X_test
+        X_test = X_test[:,:num_feats]
 
     ## Evaluation 1: No domain adaptation:
     ## FIXME -- magic number 2 is the class of interest : Negated, need to
@@ -68,7 +78,7 @@ def main(args):
     ## Think we can be cute here -- since the model trained on these files will have no weights for non-pivot features, we can just reuse the allnew_X_test
     ## matrix at classification time:
     evaluate_and_print_scores(pivotnew_X_train, pivotnew_y_train, all_plus_new_X_test, y_test, 2)
-    
+
 
 if __name__ == '__main__':
     args = sys.argv[1:]
