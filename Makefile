@@ -23,7 +23,7 @@ joindot = $(subst $(space),.,$(join $1,$2))
 	cat $^ | perl -pe 's/^\S+\s+//' | perl -pe 's/(\d+):(\S+)/\1/g;s/ /\n/g' | sort -n | uniq -c | sort -n | awk '$$1 >= 50' | awk '{print $$2}' | sort -n  > $@
 
 %+scl.pivots: $$(call source,%)-gt50feats.txt $$(call target,%)-gt50feats.txt
-	cat $^ | sort | uniq -c | grep " 2 " | awk '{print $$2}' | sort -n > $@
+	cat $^ | sort | uniq -c | grep " 2 " | awk '{print $$2}' | grep -v "^0" | sort -n > $@
 
 pivot_data/%/pivots_done.txt: %.pivots $$(call source,%).liblinear0 $$(call target,%).liblinear0
 	mkdir -p pivot_data/$*
