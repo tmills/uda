@@ -86,7 +86,7 @@ def main(args):
 
     ## Evaluation 8: Yu and Jiang method using similarity with random sample of target features
     num_exemplars = 50
-    indices = np.sort(np.random.choice(num_features, num_exemplars, replace=False))
+    indices = np.sort(np.random.choice(num_test_instances, num_exemplars, replace=False))
     test_exemplars = X_test[indices]
     ## Normalize
     test_exemplars /= test_exemplars.sum(1)
