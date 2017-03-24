@@ -53,19 +53,23 @@ def main(args):
     num_new_feats = theta.shape[1]
     theta_file.close()
 
+    ## Evaluation 3: Only pivot features used to train classifiers
     print("Pivot-only feature space evaluation")
     pivot_X_train, pivot_y_train = load_svmlight_file(join(args[2], 'transformed/pivot-only.liblinear'), n_features=num_feats)
     evaluate_and_print_scores(pivot_X_train, pivot_y_train, X_test, y_test, 2)
 
+    ## Evaluation 4: Only non-pivot features used to train classifiers
     print("Non-pivot only feature space evaluation")
     nopivot_X_train, nopivot_y_train = load_svmlight_file(join(args[2], 'transformed/nonpivot-only.liblinear'), n_features=num_feats)
     evaluate_and_print_scores(nopivot_X_train, nopivot_y_train, X_test, y_test, 2)
 
+    ## Evaluation 5: Only projected ("new") features used to train classifiers
     new_X_train, new_y_train = load_svmlight_file(join(args[2], 'transformed/new.liblinear'))
     new_X_test = X_test * theta
     print("New-only feature space evaluation")
     evaluate_and_print_scores(new_X_train, new_y_train, new_X_test, y_test, 2)
 
+    ## Evaluation 6: All original plus all new features used to train classifiers
     print("All + new feature space evaluation")
     allnew_X_train, allnew_y_train = load_svmlight_file(join(args[2], 'transformed/all_plus_new.liblinear'), n_features=num_feats+num_new_feats)
     all_plus_new_X_test = np.matrix(np.zeros((X_test.shape[0], num_feats+num_new_feats)))
@@ -73,11 +77,30 @@ def main(args):
     all_plus_new_X_test[:, num_feats:] += new_X_test
     evaluate_and_print_scores(allnew_X_train, allnew_y_train, all_plus_new_X_test, y_test, 2)
 
+    ## Evaluation 7: Pivot features plus all new features used to train classifiers
     print("Pivot + new feature space evaluation")
     pivotnew_X_train, pivotnew_y_train = load_svmlight_file(join(args[2], 'transformed/pivot_plus_new.liblinear'), n_features=num_feats+num_new_feats)
     ## Think we can be cute here -- since the model trained on these files will have no weights for non-pivot features, we can just reuse the allnew_X_test
     ## matrix at classification time:
     evaluate_and_print_scores(pivotnew_X_train, pivotnew_y_train, all_plus_new_X_test, y_test, 2)
+
+    ## Evaluation 8: Yu and Jiang method using similarity with random sample of target features
+    num_exemplars = 50
+    indices = np.sort(np.random.choice(num_features, num_exemplars, replace=False))
+    test_exemplars = X_test[indices]
+    ## Normalize
+    test_exemplars /= test_exemplars.sum(1)
+    ## Create a new feature for every train instance that is the similarity with each of these exemplars:
+    ## Output matrix is num_train_instances x num_exemplars. add this to end of X_train:
+    similarity_features_train = X_train * test_exemplars.transpose()
+    similarity_features_test = X_test * test_exemplars.transpose()
+    all_plus_sim_X_train = np.matrix(np.zeros((num_instances, num_feats + num_exemplars)))
+    all_plus_sim_X_train[:, :num_feats] += X_train
+    all_plus_sim_X_train[:, num_feats:] += similarity_features_train
+    all_plus_sim_X_test = np.matrix(np.zeros((num_test_instances, num_feats + num_exemplars)))
+    all_plus_sim_X_test[:, :num_feats] += X_test
+    all_plus_sim_X_test[:,num_feats:] += similarity_features_test
+    evaluate_and_print_scores(all_plus_sim_X_train, y_train, all_plus_sim_X_test, y_test, 2)
 
 
 if __name__ == '__main__':
