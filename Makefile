@@ -27,7 +27,7 @@ joindot = $(subst $(space),.,$(join $1,$2))
 
 pivot_data/%/pivots_done.txt: %.pivots $$(call source,%).liblinear0 $$(call target,%).liblinear0
 	mkdir -p pivot_data/$*
-	perl scripts/build_pivot_training_data.pl $^ pivot_data/$* > $@
+	python scripts/build_pivot_training_data.py $^ pivot_data/$* > $@
 
 pivot_data/%/theta_svd.pkl: pivot_data/%/pivots_done.txt
 	python scripts/learn_scl_weights.py pivot_data/$*
