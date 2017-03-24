@@ -35,5 +35,5 @@ pivot_data/%/theta_svd.pkl: pivot_data/%/pivots_done.txt
 pivot_data/%/transformed/new.liblinear: $$(call source,$$*).liblinear0 pivot_data/%/theta_svd.pkl $$*.pivots
 	python scripts/transform_features.py $< pivot_data/$*/ $*.pivots
 
-%.eval: $$(call source,%).liblinear0 $$(call target,%).liblinear0 pivot_data/%/transformed/new.liblinear0
+%.eval: $$(call source,%).liblinear0 $$(call target,%).liblinear0 pivot_data/%/transformed/new.liblinear
 	python scripts/evaluate_scl.py $(call source,$*).liblinear0 $(call target,$*).liblinear0 pivot_data/$*/ > $@

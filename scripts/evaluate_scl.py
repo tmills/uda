@@ -48,10 +48,13 @@ def main(args):
     evaluate_and_print_scores(X_train, y_train, X_test, y_test, 2)
 
     ## Evaluation 2: "New" feature set: Mapping from non-pivot features into SVD pivot space:
-    theta_file = open(join(args[2], 'theta_svd.pkl'), 'rb')
-    theta = pickle.load(theta_file)
-    num_new_feats = theta.shape[1]
-    theta_file.close()
+    with open(join(args[2], 'theta_svd.pkl'), 'rb') as theta_file:
+        theta = pickle.load(theta_file)
+        num_new_feats = theta.shape[1]
+
+    with open(join(args[2], 'theta_full.pkl'), 'rb') as theta_file:
+        theta_full = pickle.load(theta_file)
+        num_pivots = theta_full.shape[1]
 
     ## Evaluation 3: Only pivot features used to train classifiers
     print("Pivot-only feature space evaluation")
@@ -83,6 +86,17 @@ def main(args):
     ## Think we can be cute here -- since the model trained on these files will have no weights for non-pivot features, we can just reuse the allnew_X_test
     ## matrix at classification time:
     evaluate_and_print_scores(pivotnew_X_train, pivotnew_y_train, all_plus_new_X_test, y_test, 2)
+
+    print("Pivot prediction evaluation")
+    pred_X_train, pred_y_train =  load_svmlight_file(join(args[2], 'transformed/pivot_pred.liblinear'), n_features=num_pivots)
+    pred_X_test = (X_test * theta_full)
+    evaluate_and_print_scores(pred_X_train, y_train, pred_X_test, y_test, 2)
+
+    allpred_X_train = np.matrix(np.zeros((X_train.shape[0], num_feats+num_pivots)))
+    allpred_X_test = np.matrix(np.zeros((X_test.shape[0], num_feats+num_pivots)))
+    allpred_X_test[:, :num_feats] += X_test
+    allpred_X_test[:,num_feats:] += (X_test * theta_full)
+    evaluate_and_print_scores(allpred_X_train, y_train, allpred_X_test, y_test, 2)
 
     ## Evaluation 8: Yu and Jiang method using similarity with random sample of target features
     num_exemplars = 50
