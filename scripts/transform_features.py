@@ -9,8 +9,8 @@ import scipy.sparse
 import sys
 
 def main(args):
-    if len(args) < 3:
-        sys.stderr.write("One required argument: <labeled source data> <labeled target data> <matrix directory> <pivot index file>\n\n")
+    if len(args) < 4:
+        sys.stderr.write("Required argument(s): <labeled source data> <labeled target data> <matrix directory> <pivot index file>\n\n")
         sys.exit(-1)
 
     (source_file, target_file, matrix_dir, pivot_file) = args
