@@ -66,6 +66,8 @@ def main(args):
     pivotpred_X_train = nopivot_X_train * theta_full
     pivotpred_X_test = nopivot_X_test * theta_full
     evaluate_and_print_scores(pivotpred_X_train, y_train, pivotpred_X_test, y_test, 2)
+    #del pivotpred_X_train
+    #del pivotpred_X_test
 
     print("All + new feature space evaluation")
     all_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_new_feats)))
@@ -75,6 +77,7 @@ def main(args):
     all_plus_new_test[:, :num_feats] += X_test
     all_plus_new_test[:, num_feats:] += new_X_test
     evaluate_and_print_scores(all_plus_new_train, y_train, all_plus_new_test, y_test, 2)
+    del all_plus_new_train, all_plus_new_test
 
     print("All + no-svd pivot feature space")
     all_plus_pivotpred_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
@@ -84,6 +87,7 @@ def main(args):
     all_plus_pivotpred_test[:, :num_feats] += X_test
     all_plus_pivotpred_test[:, num_feats:] += pivotpred_X_test
     evaluate_and_print_scores(all_plus_pivotpred_train, y_train, all_plus_pivotpred_test, y_test, 2)
+    del all_plus_pivotpred_train, all_plus_pivotpred_test
 
     print("Pivot + new feature space evaluation")
     pivot_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_new_feats)))
@@ -93,6 +97,7 @@ def main(args):
     pivot_plus_new_test[:, :num_feats] += pivot_X_test
     pivot_plus_new_test[:, num_feats:] += new_X_test
     evaluate_and_print_scores(pivot_plus_new_train, y_train, pivot_plus_new_test, y_test, 2)
+    del pivot_plus_new_train, pivot_plus_new_test
 
     print("Pivot + pivot prediction space")
     pivot_plus_pivot_pred_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
@@ -102,6 +107,7 @@ def main(args):
     pivot_plus_pivot_pred_test[:, :num_feats] += pivot_X_test
     pivot_plus_pivot_pred_test[:, num_feats:] += pivotpred_X_test
     evaluate_and_print_scores(pivot_plus_pivot_pred_train, y_train, pivot_plus_pivot_pred_test, y_test, 2)
+    del pivot_plus_pivot_pred_train, pivot_plus_pivot_pred_test
 
     print("Yu and Jiang method (50 similarity features)")
     num_exemplars = 50
