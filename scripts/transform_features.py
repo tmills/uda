@@ -68,22 +68,40 @@ def main(args):
     evaluate_and_print_scores(pivotpred_X_train, y_train, pivotpred_X_test, y_test, 2)
 
     print("All + new feature space evaluation")
-    all_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
+    all_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_new_feats)))
     all_plus_new_train[:, :num_feats] += X_train
     all_plus_new_train[:, num_feats:] += new_X_train
-    all_plus_new_test = np.matrix(np.zeros((X-test.shape[0], num_feats + num_pivots)))
+    all_plus_new_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_new_feats)))
     all_plus_new_test[:, :num_feats] += X_test
     all_plus_new_test[:, num_feats:] += new_X_test
     evaluate_and_print_scores(all_plus_new_train, y_train, all_plus_new_test, y_test, 2)
 
+    print("All + no-svd pivot feature space")
+    all_plus_pivotpred_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
+    all_plus_pivotpred_train[:, :num_feats] += X_train
+    all_plus_pivotpred_train[:, num_feats:] += pivotpred_X_train
+    all_plus_pivotpred_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_pivots)))
+    all_plus_pivotpred_test[:, :num_feats] += X_test
+    all_plus_pivotpred_test[:, num_feats:] += pivotpred_X_test
+    evaluate_and_print_scores(all_plus_pivotpred_train, y_train, all_plus_pivotpred_test, y_test, 2)
+
     print("Pivot + new feature space evaluation")
-    pivot_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
+    pivot_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_new_feats)))
     pivot_plus_new_train[:, :num_feats] += pivot_X_train
     pivot_plus_new_train[:, num_feats:] += new_X_train
-    pivot_plus_new_test = np.matrix(np.zeros((X-test.shape[0], num_feats + num_pivots)))
+    pivot_plus_new_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_new_feats)))
     pivot_plus_new_test[:, :num_feats] += pivot_X_test
     pivot_plus_new_test[:, num_feats:] += new_X_test
     evaluate_and_print_scores(pivot_plus_new_train, y_train, pivot_plus_new_test, y_test, 2)
+
+    print("Pivot + pivot prediction space")
+    pivot_plus_pivot_pred_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
+    pivot_plus_pivot_pred_train[:,:num_feats] += pivot_X_train
+    pivot_plus_pivot_pred_train[:, num_feats:] += pivotpred_X_train
+    pivot_plus_pivot_pred_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_pivots)))
+    pivot_plus_pivot_pred_test[:, :num_feats] += pivot_X_test
+    pivot_plus_pivot_pred_test[:, num_feats:] += pivotpred_X_test
+    evaluate_and_print_scores(pivot_plus_pivot_pred_train, y_train, pivot_plus_pivot_pred_test, y_test, 2)
 
     print("Yu and Jiang method (50 similarity features)")
     num_exemplars = 50
