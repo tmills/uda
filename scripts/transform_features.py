@@ -41,7 +41,11 @@ def main(args):
     pivot_X_test = remove_nonpivot_columns(X_test, pivots)
 
     print("Original feature space evaluation (AKA no adaptation, AKA pivot+non-pivot)")
-    evaluate_and_print_scores(X_train, y_train, X_test, y_test, 2)
+    ## C < 1 => more regularization
+    ## C > 1 => more fitting to training
+    for C in [0.01, 0.1, 1.0, 10.0, 100.0]:
+        print(" C=%f" % (C))
+        evaluate_and_print_scores(X_train, y_train, X_test, y_test, 2, C=C)
 
     with open(join(args[2], 'theta_svd.pkl'), 'rb') as theta_file:
         theta = pickle.load(theta_file)
@@ -108,6 +112,15 @@ def main(args):
     pivot_plus_pivot_pred_test[:, num_feats:] += pivotpred_X_test
     evaluate_and_print_scores(pivot_plus_pivot_pred_train, y_train, pivot_plus_pivot_pred_test, y_test, 2)
     del pivot_plus_pivot_pred_train, pivot_plus_pivot_pred_test
+
+    print("Original space minus missing target features")
+    ## since X_test is a matrix a slice is a matrix and need to get the 2d array and then grab the 0th row to get a 1d array.
+    column_sums = abs(X_test).sum(0).A[0,:]
+    assert len(column_sums) == X_test.shape[1]
+    zero_columns = np.where(column_sums == 0)[0]
+    nosrconly_feats_train = np.zeros_like(X_train) + X_train
+    nosrconly_feats_train[:, zero_columns] = 0
+    evaluate_and_print_scores(nosrconly_feats_train, y_train, X_test, y_test, 2)
 
     print("Yu and Jiang method (50 similarity features)")
     num_exemplars = 50
