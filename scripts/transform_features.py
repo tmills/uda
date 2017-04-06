@@ -8,6 +8,7 @@ import os
 import scipy.sparse
 import sys
 from sklearn import svm
+from sklearn.feature_selection import chi2
 
 def main(args):
     if len(args) < 4:
@@ -34,6 +35,45 @@ def main(args):
 
     nopivot_X_test = remove_pivot_columns(X_test, pivots)
     pivot_X_test = remove_nonpivot_columns(X_test, pivots)
+
+    print("Original feature space evaluation (AKA no adaptation, AKA pivot+non-pivot)")
+    ## C < 1 => more regularization
+    ## C > 1 => more fitting to training
+    for C in [0.001, 0.01, 0.1, 1.0]:
+        print("L1: C=%f" % (C))
+        evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, C=C, penalty='l1', dual=False)
+        print("L2: C=%f" % (C))
+        evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, C=C)
+
+    print("Feature selection in source space")
+    ## Find features useful for the primary task:
+    (chi2_task, pval_task) = chi2(X_train, y_train)
+    task_feats_inds = np.where(pval_task < 0.05)[0]
+    X_train_featsel = remove_nonpivot_columns(X_train, task_feats_inds)
+    X_test_featsel = remove_nonpivot_columns(X_test, task_feats_inds)
+    evaluate_and_print_scores(X_train_featsel, y_train, X_test_featsel, y_test, goal_ind)
+    #del X_train_featsel, X_test_featsel
+
+    print("Remove features useful for telling domains apart")
+    ## Create dataset for training a classifier to distinguish between domains:
+    X_all = np.zeros((num_instances+num_test_instances, num_feats))
+    X_all[:num_instances,:] += X_train
+    X_all[num_instances:,:] += X_test
+    y_dataset_discrim = np.zeros(num_instances+num_test_instances)
+    y_dataset_discrim[:num_instances] = 1
+    (chi2_dd, pval_dd) = chi2(X_all, y_dataset_discrim)
+    dd_feats_inds = np.where(pval_dd > 0.05)[0]
+    X_train_domains = remove_nonpivot_columns(X_train, dd_feats_inds)
+    X_test_domains = remove_nonpivot_columns(X_test, dd_feats_inds)
+    evaluate_and_print_scores(X_train_domains, y_train, X_test_domains, y_test, goal_ind)
+    del X_train_domains, X_test_domains
+
+    print("Ben-david logic with feature selection intersection")
+    intersect_inds = np.intersect1d(task_feats_inds, dd_feats_inds)
+    X_train_intersect = remove_nonpivot_columns(X_train, intersect_inds)
+    X_test_intersect = remove_nonpivot_columns(X_test, intersect_inds)
+    evaluate_and_print_scores(X_train_intersect, y_train, X_test_intersect, y_test, goal_ind)
+    del X_train_intersect, X_test_intersect
 
     print("Balanced bootstrapping method (add equal amounts of true/false examples)")
     for percentage in [0.01, 0.1, 0.25]:
@@ -90,13 +130,6 @@ def main(args):
         train_plus_bootstrap_y[num_instances:] += np.array(added_y)
         evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind)
         del train_plus_bootstrap_y, train_plus_bootstrap_X
-
-    print("Original feature space evaluation (AKA no adaptation, AKA pivot+non-pivot)")
-    ## C < 1 => more regularization
-    ## C > 1 => more fitting to training
-    for C in [0.01, 0.1, 1.0, 10.0, 100.0]:
-        print(" C=%f" % (C))
-        evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, C=C)
 
     with open(join(matrix_dir, 'theta_svd.pkl'), 'rb') as theta_file:
         theta = pickle.load(theta_file)
@@ -200,6 +233,8 @@ def main(args):
     all_plus_sim_X_test[:, :num_feats] += X_test
     all_plus_sim_X_test[:,num_feats:] += similarity_features_test
     evaluate_and_print_scores(all_plus_sim_X_train, y_train, all_plus_sim_X_test, y_test, goal_ind)
+    del all_plus_sim_X_train, all_plus_sim_X_test
+
 
 
 if __name__ == '__main__':

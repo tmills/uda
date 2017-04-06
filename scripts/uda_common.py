@@ -19,8 +19,8 @@ def remove_nonpivot_columns(matrix, pivots):
 
     return scipy.sparse.csr_matrix(matrix_return)
 
-def evaluate_and_print_scores(X_train, y_train, X_test, y_test, score_label, C=1.0, sample_weight=None):
-    svc = svm.LinearSVC(C=C)
+def evaluate_and_print_scores(X_train, y_train, X_test, y_test, score_label, C=1.0, sample_weight=None, penalty='l2', loss='squared_hinge', dual=True):
+    svc = svm.LinearSVC(C=C, penalty=penalty, loss=loss, dual=dual)
     svc.fit(X_train, y_train, sample_weight=sample_weight)
     preds = svc.predict(X_test)
 
