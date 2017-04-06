@@ -22,7 +22,7 @@ def main(args):
     num_pivots = len(pivots)
 
     print("Reading input data from %s" % (source_file))
-    X_train, y_train = load_svmlight_file(source_file)
+    X_train, y_train = load_svmlight_file(source_file, dtype='float32')
     num_instances, num_feats = X_train.shape
     print("  Data has %d instances and %d features" % (num_instances, num_feats))
     nopivot_X_train = remove_pivot_columns(X_train, pivots)
@@ -106,23 +106,21 @@ def main(args):
         theta_full = pickle.load(theta_file)
         num_pivots = theta_full.shape[1]
 
-    print("Pivot-only feature space evaluation")
-    evaluate_and_print_scores(pivot_X_train, y_train, pivot_X_test, y_test, goal_ind)
+    #print("Pivot-only feature space evaluation")
+    #evaluate_and_print_scores(pivot_X_train, y_train, pivot_X_test, y_test, goal_ind)
 
-    print("Non-pivot only feature space evaluation")
-    evaluate_and_print_scores(nopivot_X_train, y_train, nopivot_X_test, y_test, goal_ind)
+    #print("Non-pivot only feature space evaluation")
+    #evaluate_and_print_scores(nopivot_X_train, y_train, nopivot_X_test, y_test, goal_ind)
 
-    print("New-only feature space evaluation (svd)")
+    #print("New-only feature space evaluation (svd)")
     new_X_train = nopivot_X_train * theta
     new_X_test = nopivot_X_test * theta
-    evaluate_and_print_scores(new_X_train, y_train, new_X_test, y_test, goal_ind)
+    #evaluate_and_print_scores(new_X_train, y_train, new_X_test, y_test, goal_ind)
 
-    print("New-only features space evaluation (no svd)")
+    #print("New-only features space evaluation (no svd)")
     pivotpred_X_train = nopivot_X_train * theta_full
     pivotpred_X_test = nopivot_X_test * theta_full
-    evaluate_and_print_scores(pivotpred_X_train, y_train, pivotpred_X_test, y_test, goal_ind)
-    #del pivotpred_X_train
-    #del pivotpred_X_test
+    #evaluate_and_print_scores(pivotpred_X_train, y_train, pivotpred_X_test, y_test, goal_ind)
 
     print("All + new feature space evaluation")
     all_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_new_feats)))
@@ -134,15 +132,15 @@ def main(args):
     evaluate_and_print_scores(all_plus_new_train, y_train, all_plus_new_test, y_test, goal_ind)
     del all_plus_new_train, all_plus_new_test
 
-    print("All + no-svd pivot feature space")
-    all_plus_pivotpred_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
-    all_plus_pivotpred_train[:, :num_feats] += X_train
-    all_plus_pivotpred_train[:, num_feats:] += pivotpred_X_train
-    all_plus_pivotpred_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_pivots)))
-    all_plus_pivotpred_test[:, :num_feats] += X_test
-    all_plus_pivotpred_test[:, num_feats:] += pivotpred_X_test
-    evaluate_and_print_scores(all_plus_pivotpred_train, y_train, all_plus_pivotpred_test, y_test, goal_ind)
-    del all_plus_pivotpred_train, all_plus_pivotpred_test
+    #print("All + no-svd pivot feature space")
+    # all_plus_pivotpred_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
+    # all_plus_pivotpred_train[:, :num_feats] += X_train
+    # all_plus_pivotpred_train[:, num_feats:] += pivotpred_X_train
+    # all_plus_pivotpred_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_pivots)))
+    # all_plus_pivotpred_test[:, :num_feats] += X_test
+    # all_plus_pivotpred_test[:, num_feats:] += pivotpred_X_test
+    # evaluate_and_print_scores(all_plus_pivotpred_train, y_train, all_plus_pivotpred_test, y_test, goal_ind)
+    # del all_plus_pivotpred_train, all_plus_pivotpred_test
 
     print("Pivot + new feature space evaluation")
     pivot_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_new_feats)))
@@ -154,26 +152,36 @@ def main(args):
     evaluate_and_print_scores(pivot_plus_new_train, y_train, pivot_plus_new_test, y_test, goal_ind)
     del pivot_plus_new_train, pivot_plus_new_test
 
-    print("Pivot + pivot prediction space")
-    pivot_plus_pivot_pred_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
-    pivot_plus_pivot_pred_train[:,:num_feats] += pivot_X_train
-    pivot_plus_pivot_pred_train[:, num_feats:] += pivotpred_X_train
-    pivot_plus_pivot_pred_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_pivots)))
-    pivot_plus_pivot_pred_test[:, :num_feats] += pivot_X_test
-    pivot_plus_pivot_pred_test[:, num_feats:] += pivotpred_X_test
-    evaluate_and_print_scores(pivot_plus_pivot_pred_train, y_train, pivot_plus_pivot_pred_test, y_test, goal_ind)
-    del pivot_plus_pivot_pred_train, pivot_plus_pivot_pred_test
+    # print("Pivot + pivot prediction space")
+    # pivot_plus_pivot_pred_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
+    # pivot_plus_pivot_pred_train[:,:num_feats] += pivot_X_train
+    # pivot_plus_pivot_pred_train[:, num_feats:] += pivotpred_X_train
+    # pivot_plus_pivot_pred_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_pivots)))
+    # pivot_plus_pivot_pred_test[:, :num_feats] += pivot_X_test
+    # pivot_plus_pivot_pred_test[:, num_feats:] += pivotpred_X_test
+    # evaluate_and_print_scores(pivot_plus_pivot_pred_train, y_train, pivot_plus_pivot_pred_test, y_test, goal_ind)
+    # del pivot_plus_pivot_pred_train, pivot_plus_pivot_pred_test
 
     print("Original space minus missing target features")
     ## since X_test is a matrix a slice is a matrix and need to get the 2d array and then grab the 0th row to get a 1d array.
     column_sums = abs(X_test).sum(0).A[0,:]
     assert len(column_sums) == X_test.shape[1]
     zero_columns = np.where(column_sums == 0)[0]
-    nosrconly_feats_train = np.zeros_like(X_train) + X_train
+    nosrconly_feats_train = scipy.sparse.lil_matrix(np.zeros(X_train.shape) + X_train)
     nosrconly_feats_train[:, zero_columns] = 0
     evaluate_and_print_scores(nosrconly_feats_train, y_train, X_test, y_test, goal_ind)
     del nosrconly_feats_train
 
+    ## TODO Fix this with feature selection?
+    #print("Sun et al. 15 UFEDA")
+    #sample_size = 100
+    #train_index = min(sample_size, X_train.shape[0])
+    #test_index = min(sample_size, X_test.shape[0])
+    #cov_train = np.cov(X_train[:train_index,:].toarray(), rowvar=False) + np.eye(X_train.shape[1])
+    #cov_test = np.cov(X_test[:test_index,:].toarray(), rowvar=False) + np.eye(X_test.shape[1])
+    #whitened_train = X_train * cov_train**-0.5
+    #recolored_train = whitened_train * cov_test.transpose()**0.5
+    #evaluate_and_print_scores(recolored_train, y_train, X_test, y_test, 2)
 
     print("Yu and Jiang method (50 similarity features)")
     num_exemplars = 50

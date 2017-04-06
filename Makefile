@@ -33,5 +33,5 @@ pivot_data/%/pivots_done.txt: %.pivots $$(call source,%).liblinear0 $$(call targ
 pivot_data/%/theta_svd.pkl: pivot_data/%/pivots_done.txt
 	python scripts/learn_scl_weights.py pivot_data/$*
 
-%.eval: $$(call source,%).liblinear0 $$(call target,%).liblinear0 pivot_data/%/theta_svd.pkl
+%.eval: $$(call source,%).liblinear0 $$(call target,%).liblinear0 pivot_data/%/theta_svd.pkl %.pivots
 	python scripts/transform_features.py $(call source,$*).liblinear0 $(call target,$*).liblinear0 pivot_data/$*/ $*.pivots > $@
