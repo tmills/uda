@@ -3,7 +3,7 @@ from os.path import join,exists
 import numpy as np
 import pickle
 from sklearn.datasets import load_svmlight_file, dump_svmlight_file
-from uda_common import remove_pivot_columns, remove_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train
+from uda_common import remove_pivot_columns, remove_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c
 import os
 import scipy.sparse
 import sys
@@ -39,19 +39,32 @@ def main(args):
     print("Original feature space evaluation (AKA no adaptation, AKA pivot+non-pivot)")
     ## C < 1 => more regularization
     ## C > 1 => more fitting to training
-    for C in [0.001, 0.01, 0.1, 1.0]:
-        print("L1: C=%f" % (C))
-        evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, C=C, penalty='l1', dual=False)
-        print("L2: C=%f" % (C))
-        evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, C=C)
+    C_list = [0.001, 0.01, 0.1, 1.0, 10.0]
+    (l1_c, l1_f1) = find_best_c(X_train, y_train, goal_ind, penalty='l1', dual=False)
+    print("Optimizing l1 with cross-validation gives C=%f and f1=%f" % (l1_c, l1_f1))
+    (l2_c, l2_f1) = find_best_c(X_train, y_train, goal_ind)
+    print("Optimizing l2 with cross-validation gives C=%f and f1=%f" % (l2_c, l2_f1))
+
+    print("Evaluating with l1=%f regularization optimized for source:" % l1_c)
+    evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, C=l1_c, penalty='l1', dual=False)
+
+    print("Evaluating l1 at c=%f" % (l1_c/10))
+    evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, C=l1_c/10, penalty='l1', dual=False)
+
+    print("Evaluating with l2=%f regularization optimized for source:" % l2_c)
+    evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, C=l2_c)
+
+    print("Evaluating l2 at c=%f" % (l2_c/10))
+    evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, C=l2_c/10)
 
     print("Feature selection in source space")
     ## Find features useful for the primary task:
     (chi2_task, pval_task) = chi2(X_train, y_train)
     task_feats_inds = np.where(pval_task < 0.05)[0]
     X_train_featsel = remove_nonpivot_columns(X_train, task_feats_inds)
+    (l2_c, l2_f1) = find_best_c(X_train_featsel, y_train, goal_ind)
     X_test_featsel = remove_nonpivot_columns(X_test, task_feats_inds)
-    evaluate_and_print_scores(X_train_featsel, y_train, X_test_featsel, y_test, goal_ind)
+    evaluate_and_print_scores(X_train_featsel, y_train, X_test_featsel, y_test, goal_ind, C=l2_c)
     #del X_train_featsel, X_test_featsel
 
     print("Remove features useful for telling domains apart")
@@ -65,16 +78,19 @@ def main(args):
     dd_feats_inds = np.where(pval_dd > 0.05)[0]
     X_train_domains = remove_nonpivot_columns(X_train, dd_feats_inds)
     X_test_domains = remove_nonpivot_columns(X_test, dd_feats_inds)
-    evaluate_and_print_scores(X_train_domains, y_train, X_test_domains, y_test, goal_ind)
+    (l2_c, l2_f1) = find_best_c(X_train_domains, y_train, goal_ind)
+    evaluate_and_print_scores(X_train_domains, y_train, X_test_domains, y_test, goal_ind, C=l2_c)
     del X_train_domains, X_test_domains
 
     print("Ben-david logic with feature selection intersection")
     intersect_inds = np.intersect1d(task_feats_inds, dd_feats_inds)
     X_train_intersect = remove_nonpivot_columns(X_train, intersect_inds)
     X_test_intersect = remove_nonpivot_columns(X_test, intersect_inds)
-    evaluate_and_print_scores(X_train_intersect, y_train, X_test_intersect, y_test, goal_ind)
+    (l2_c, l2_f1) = find_best_c(X_train_intersect, y_train, goal_ind)
+    evaluate_and_print_scores(X_train_intersect, y_train, X_test_intersect, y_test, goal_ind, C=l2_c)
     del X_train_intersect, X_test_intersect
 
+    ## FIXME -- don't add all at once?
     print("Balanced bootstrapping method (add equal amounts of true/false examples)")
     for percentage in [0.01, 0.1, 0.25]:
         svc = svm.LinearSVC()
@@ -103,7 +119,8 @@ def main(args):
         train_plus_bootstrap_y = np.zeros(num_instances + len(added_y))
         train_plus_bootstrap_y[:num_instances] += y_train
         train_plus_bootstrap_y[num_instances:] += np.array(added_y)
-        evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind)
+        (l2_c, l2_f1) = find_best_c(train_plus_bootstrap_X, train_plus_bootstrap_y, goal_ind)
+        evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
         del train_plus_bootstrap_y, train_plus_bootstrap_X
 
     print("Enriching bootstrapping method (add minority class examples only)")
@@ -128,7 +145,8 @@ def main(args):
         train_plus_bootstrap_y = np.zeros(num_instances + len(added_y))
         train_plus_bootstrap_y[:num_instances] += y_train
         train_plus_bootstrap_y[num_instances:] += np.array(added_y)
-        evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind)
+        (l2_c, l2_f1) = find_best_c(train_plus_bootstrap_X, train_plus_bootstrap_y, goal_ind)
+        evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
         del train_plus_bootstrap_y, train_plus_bootstrap_X
 
     with open(join(matrix_dir, 'theta_svd.pkl'), 'rb') as theta_file:
@@ -162,7 +180,8 @@ def main(args):
     all_plus_new_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_new_feats)))
     all_plus_new_test[:, :num_feats] += X_test
     all_plus_new_test[:, num_feats:] += new_X_test
-    evaluate_and_print_scores(all_plus_new_train, y_train, all_plus_new_test, y_test, goal_ind)
+    (l2_c, l2_f1) = find_best_c(all_plus_new_train, y_train, goal_ind)
+    evaluate_and_print_scores(all_plus_new_train, y_train, all_plus_new_test, y_test, goal_ind, l2_c)
     del all_plus_new_train, all_plus_new_test
 
     #print("All + no-svd pivot feature space")
@@ -182,7 +201,8 @@ def main(args):
     pivot_plus_new_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_new_feats)))
     pivot_plus_new_test[:, :num_feats] += pivot_X_test
     pivot_plus_new_test[:, num_feats:] += new_X_test
-    evaluate_and_print_scores(pivot_plus_new_train, y_train, pivot_plus_new_test, y_test, goal_ind)
+    (l2_c, l2_f1)=  find_best_c(pivot_plus_new_train, y_train, goal_ind)
+    evaluate_and_print_scores(pivot_plus_new_train, y_train, pivot_plus_new_test, y_test, goal_ind, l2_c)
     del pivot_plus_new_train, pivot_plus_new_test
 
     # print("Pivot + pivot prediction space")
@@ -202,7 +222,8 @@ def main(args):
     zero_columns = np.where(column_sums == 0)[0]
     nosrconly_feats_train = scipy.sparse.lil_matrix(np.zeros(X_train.shape) + X_train)
     nosrconly_feats_train[:, zero_columns] = 0
-    evaluate_and_print_scores(nosrconly_feats_train, y_train, X_test, y_test, goal_ind)
+    (l2_c, l2_f1) = find_best_c(nosrconly_feats_train, y_train, goal_ind)
+    evaluate_and_print_scores(nosrconly_feats_train, y_train, X_test, y_test, goal_ind, l2_c)
     del nosrconly_feats_train
 
     ## TODO Fix this with feature selection?
@@ -232,7 +253,8 @@ def main(args):
     all_plus_sim_X_test = np.matrix(np.zeros((num_test_instances, num_feats + num_exemplars)))
     all_plus_sim_X_test[:, :num_feats] += X_test
     all_plus_sim_X_test[:,num_feats:] += similarity_features_test
-    evaluate_and_print_scores(all_plus_sim_X_train, y_train, all_plus_sim_X_test, y_test, goal_ind)
+    (l2_c, l2_f1) = find_best_c(all_plus_sim_X_train, y_train, goal_ind)
+    evaluate_and_print_scores(all_plus_sim_X_train, y_train, all_plus_sim_X_test, y_test, goal_ind, l2_c)
     del all_plus_sim_X_train, all_plus_sim_X_test
 
 
