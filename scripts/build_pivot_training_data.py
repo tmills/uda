@@ -9,9 +9,10 @@ import sys
 def main(args):
     if len(args) < 4:
         sys.stderr.write("Four required arguments: <pivot file> <source data file> <target data file> <output directory>\n")
+        sys.exit(-1)
 
     out_dir = args[3]
-    
+
     print("Reading in data files")
     X_train, y_train = load_svmlight_file(args[1])
     X_train = X_train.tolil()

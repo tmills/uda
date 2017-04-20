@@ -25,6 +25,9 @@ joindot = $(subst $(space),.,$(join $1,$2))
 %+scl.pivots: $$(call source,%)-gt50feats.txt $$(call target,%)-gt50feats.txt
 	cat $^ | sort | uniq -c | grep " 2 " | awk '{print $$2}' | grep -v "^0" | sort -n > $@
 
+%+mi.pivots: $$(call source,%).liblinear0 $$(call target,%).liblinear0
+	python scripts/create_mi_pivots.py $^ > $@
+
 pivot_data/%/pivots_done.txt: %.pivots $$(call source,%).liblinear0 $$(call target,%).liblinear0
 	mkdir -p pivot_data/$*
 	python scripts/build_pivot_training_data.py $^ pivot_data/$* > $@
