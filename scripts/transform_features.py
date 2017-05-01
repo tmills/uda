@@ -6,6 +6,7 @@ from sklearn.datasets import load_svmlight_file, dump_svmlight_file
 from uda_common import remove_pivot_columns, remove_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c
 import os
 import scipy.sparse
+from scipy.sparse import lil_matrix
 import sys
 from sklearn import svm
 from sklearn.feature_selection import chi2
@@ -74,6 +75,11 @@ def main(args):
     X_all[num_instances:,:] += X_test
     y_dataset_discrim = np.zeros(num_instances+num_test_instances)
     y_dataset_discrim[:num_instances] = 1
+    svc = svm.LinearSVC()
+    svc.fit(X_all, y_dataset_discrim)
+    train_error = 1 - svc.score(X_all, y_dataset_discrim)
+    print("Train error in trying to differentiate these datasets is %f" % train_error)
+
     (chi2_dd, pval_dd) = chi2(X_all, y_dataset_discrim)
     dd_feats_inds = np.where(pval_dd > 0.05)[0]
     X_train_domains = remove_nonpivot_columns(X_train, dd_feats_inds)
@@ -168,21 +174,33 @@ def main(args):
     new_X_test = nopivot_X_test * theta
     #evaluate_and_print_scores(new_X_train, y_train, new_X_test, y_test, goal_ind)
 
-    #print("New-only features space evaluation (no svd)")
-    pivotpred_X_train = nopivot_X_train * theta_full
-    pivotpred_X_test = nopivot_X_test * theta_full
-    #evaluate_and_print_scores(pivotpred_X_train, y_train, pivotpred_X_test, y_test, goal_ind)
 
     print("All + new feature space evaluation")
-    all_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_new_feats)))
+    all_plus_new_train = lil_matrix((X_train.shape[0], num_feats + num_new_feats), dtype='float32')
     all_plus_new_train[:, :num_feats] += X_train
     all_plus_new_train[:, num_feats:] += new_X_train
-    all_plus_new_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_new_feats)))
+    all_plus_new_test = lil_matrix((X_test.shape[0], num_feats + num_new_feats), dtype='float32')
     all_plus_new_test[:, :num_feats] += X_test
     all_plus_new_test[:, num_feats:] += new_X_test
     (l2_c, l2_f1) = find_best_c(all_plus_new_train, y_train, goal_ind)
     evaluate_and_print_scores(all_plus_new_train, y_train, all_plus_new_test, y_test, goal_ind, l2_c)
     del all_plus_new_train, all_plus_new_test
+
+    print("Pivot + new feature space evaluation")
+    pivot_plus_new_train = lil_matrix((X_train.shape[0], num_feats + num_new_feats), dtype='float32')
+    pivot_plus_new_train[:, :num_feats] += pivot_X_train
+    pivot_plus_new_train[:, num_feats:] += new_X_train
+    pivot_plus_new_test = lil_matrix((X_test.shape[0], num_feats + num_new_feats), dtype='float32')
+    pivot_plus_new_test[:, :num_feats] += pivot_X_test
+    pivot_plus_new_test[:, num_feats:] += new_X_test
+    (l2_c, l2_f1)=  find_best_c(pivot_plus_new_train, y_train, goal_ind)
+    evaluate_and_print_scores(pivot_plus_new_train, y_train, pivot_plus_new_test, y_test, goal_ind, l2_c)
+    del pivot_plus_new_train, pivot_plus_new_test
+
+    #print("New-only features space evaluation (no svd)")
+    #pivotpred_X_train = nopivot_X_train * theta_full
+    #pivotpred_X_test = nopivot_X_test * theta_full
+    #evaluate_and_print_scores(pivotpred_X_train, y_train, pivotpred_X_test, y_test, goal_ind)
 
     #print("All + no-svd pivot feature space")
     # all_plus_pivotpred_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
@@ -193,17 +211,6 @@ def main(args):
     # all_plus_pivotpred_test[:, num_feats:] += pivotpred_X_test
     # evaluate_and_print_scores(all_plus_pivotpred_train, y_train, all_plus_pivotpred_test, y_test, goal_ind)
     # del all_plus_pivotpred_train, all_plus_pivotpred_test
-
-    print("Pivot + new feature space evaluation")
-    pivot_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_new_feats)))
-    pivot_plus_new_train[:, :num_feats] += pivot_X_train
-    pivot_plus_new_train[:, num_feats:] += new_X_train
-    pivot_plus_new_test = np.matrix(np.zeros((X_test.shape[0], num_feats + num_new_feats)))
-    pivot_plus_new_test[:, :num_feats] += pivot_X_test
-    pivot_plus_new_test[:, num_feats:] += new_X_test
-    (l2_c, l2_f1)=  find_best_c(pivot_plus_new_train, y_train, goal_ind)
-    evaluate_and_print_scores(pivot_plus_new_train, y_train, pivot_plus_new_test, y_test, goal_ind, l2_c)
-    del pivot_plus_new_train, pivot_plus_new_test
 
     # print("Pivot + pivot prediction space")
     # pivot_plus_pivot_pred_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_pivots)))
@@ -220,7 +227,7 @@ def main(args):
     column_sums = abs(X_test).sum(0).A[0,:]
     assert len(column_sums) == X_test.shape[1]
     zero_columns = np.where(column_sums == 0)[0]
-    nosrconly_feats_train = scipy.sparse.lil_matrix(np.zeros(X_train.shape) + X_train)
+    nosrconly_feats_train = lil_matrix(X_train)
     nosrconly_feats_train[:, zero_columns] = 0
     (l2_c, l2_f1) = find_best_c(nosrconly_feats_train, y_train, goal_ind)
     evaluate_and_print_scores(nosrconly_feats_train, y_train, X_test, y_test, goal_ind, l2_c)
@@ -247,10 +254,10 @@ def main(args):
     ## Output matrix is num_train_instances x num_exemplars. add this to end of X_train:
     similarity_features_train = X_train * test_exemplars.transpose()
     similarity_features_test = X_test * test_exemplars.transpose()
-    all_plus_sim_X_train = np.matrix(np.zeros((num_instances, num_feats + num_exemplars)))
+    all_plus_sim_X_train = lil_matrix((num_instances, num_feats + num_exemplars), dtype='float32')
     all_plus_sim_X_train[:, :num_feats] += X_train
     all_plus_sim_X_train[:, num_feats:] += similarity_features_train
-    all_plus_sim_X_test = np.matrix(np.zeros((num_test_instances, num_feats + num_exemplars)))
+    all_plus_sim_X_test = lil_matrix((num_test_instances, num_feats + num_exemplars), dtype='float32')
     all_plus_sim_X_test[:, :num_feats] += X_test
     all_plus_sim_X_test[:,num_feats:] += similarity_features_test
     (l2_c, l2_f1) = find_best_c(all_plus_sim_X_train, y_train, goal_ind)

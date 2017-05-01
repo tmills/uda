@@ -5,6 +5,7 @@ from sklearn.datasets import load_svmlight_file, dump_svmlight_file
 import numpy as np
 import scipy.sparse
 import sys
+from uda_common import align_test_X_train
 
 def main(args):
     if len(args) < 4:
@@ -17,19 +18,10 @@ def main(args):
     X_train, y_train = load_svmlight_file(args[1])
     X_train = X_train.tolil()
     X_test, y_test = load_svmlight_file(args[2])
+    X_test = align_test_X_train(X_train, X_test)
+
     num_instances, num_feats = X_train.shape
     num_test_instances, num_test_feats = X_test.shape
-    if num_test_feats < num_feats:
-        ## Expand X_test
-        #print("Not sure I need to do anything here.")
-        X_test_array = X_test.toarray()
-        X_test = scipy.sparse.lil_matrix(np.append(X_test_array, np.zeros((num_test_instances, num_feats-num_test_feats)), axis=1))
-    elif num_test_feats > num_feats:
-        ## Truncate X_test
-        X_test = X_test[:,:num_feats].tolil()
-    else:
-        X_test = X_test.tolil()
-
 
     print("Reading in pivot files and creating pivot labels dictionary")
     ## Read pivots file into dictionary:
