@@ -3,7 +3,7 @@ from os.path import join,exists
 import numpy as np
 import pickle
 from sklearn.datasets import load_svmlight_file, dump_svmlight_file
-from uda_common import remove_pivot_columns, remove_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c
+from uda_common import zero_pivot_columns, zero_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c
 import os
 import scipy.sparse
 import sys
@@ -26,15 +26,15 @@ def main(args):
     X_train, y_train = load_svmlight_file(source_file, dtype='float32')
     num_instances, num_feats = X_train.shape
     print("  Data has %d instances and %d features" % (num_instances, num_feats))
-    nopivot_X_train = remove_pivot_columns(X_train, pivots)
-    pivot_X_train = remove_nonpivot_columns(X_train, pivots)
+    nopivot_X_train = zero_pivot_columns(X_train, pivots)
+    pivot_X_train = zero_nonpivot_columns(X_train, pivots)
 
     X_test, y_test = load_svmlight_file(target_file)
     X_test = align_test_X_train(X_train, X_test)
     num_test_instances = X_test.shape[0]
 
-    nopivot_X_test = remove_pivot_columns(X_test, pivots)
-    pivot_X_test = remove_nonpivot_columns(X_test, pivots)
+    nopivot_X_test = zero_pivot_columns(X_test, pivots)
+    pivot_X_test = zero_nonpivot_columns(X_test, pivots)
 
     print("Original feature space evaluation (AKA no adaptation, AKA pivot+non-pivot)")
     ## C < 1 => more regularization

@@ -5,20 +5,23 @@ from sklearn import svm
 from sklearn.metrics import f1_score, recall_score, precision_score, accuracy_score, make_scorer
 from sklearn.model_selection import cross_val_score
 
-def remove_pivot_columns(matrix, pivots):
+def zero_pivot_columns(matrix, pivots):
     matrix_lil = matrix.tolil()
     for pivot in pivots:
         matrix_lil[:,pivot] = 0.0
 
     return matrix_lil.tocsr()
 
-def remove_nonpivot_columns(matrix, pivots):
+def zero_nonpivot_columns(matrix, pivots):
     matrix_return = np.matrix(np.zeros(matrix.shape))
 
     for pivot in pivots:
         matrix_return[:,pivot] += matrix[:,pivot]
 
     return scipy.sparse.csr_matrix(matrix_return)
+
+def remove_columns(matrix, indices):
+    return scipy.sparse.csr_matrix(np.delete(matrix, indices, 1))
 
 def evaluate_and_print_scores(X_train, y_train, X_test, y_test, score_label, C, sample_weight=None, penalty='l2', loss='squared_hinge', dual=True):
     preds = get_preds(X_train, y_train, X_test, C, sample_weight=None, penalty='l2', loss='squared_hinge', dual=True)

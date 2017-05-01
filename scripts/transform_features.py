@@ -3,7 +3,7 @@ from os.path import join,exists
 import numpy as np
 import pickle
 from sklearn.datasets import load_svmlight_file, dump_svmlight_file
-from uda_common import remove_pivot_columns, remove_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c
+from uda_common import zero_pivot_columns, zero_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c
 import os
 import scipy.sparse
 from scipy.sparse import lil_matrix
@@ -27,15 +27,15 @@ def main(args):
     X_train, y_train = load_svmlight_file(source_file, dtype='float32')
     num_instances, num_feats = X_train.shape
     print("  Data has %d instances and %d features" % (num_instances, num_feats))
-    nopivot_X_train = remove_pivot_columns(X_train, pivots)
-    pivot_X_train = remove_nonpivot_columns(X_train, pivots)
+    nopivot_X_train = zero_pivot_columns(X_train, pivots)
+    pivot_X_train = zero_nonpivot_columns(X_train, pivots)
 
     X_test, y_test = load_svmlight_file(target_file)
     X_test = align_test_X_train(X_train, X_test)
     num_test_instances = X_test.shape[0]
 
-    nopivot_X_test = remove_pivot_columns(X_test, pivots)
-    pivot_X_test = remove_nonpivot_columns(X_test, pivots)
+    nopivot_X_test = zero_pivot_columns(X_test, pivots)
+    pivot_X_test = zero_nonpivot_columns(X_test, pivots)
 
     print("Original feature space evaluation (AKA no adaptation, AKA pivot+non-pivot)")
     ## C < 1 => more regularization
@@ -62,9 +62,9 @@ def main(args):
     ## Find features useful for the primary task:
     (chi2_task, pval_task) = chi2(X_train, y_train)
     task_feats_inds = np.where(pval_task < 0.05)[0]
-    X_train_featsel = remove_nonpivot_columns(X_train, task_feats_inds)
+    X_train_featsel = zero_nonpivot_columns(X_train, task_feats_inds)
     (l2_c, l2_f1) = find_best_c(X_train_featsel, y_train, goal_ind)
-    X_test_featsel = remove_nonpivot_columns(X_test, task_feats_inds)
+    X_test_featsel = zero_nonpivot_columns(X_test, task_feats_inds)
     evaluate_and_print_scores(X_train_featsel, y_train, X_test_featsel, y_test, goal_ind, C=l2_c)
     #del X_train_featsel, X_test_featsel
 
@@ -82,16 +82,16 @@ def main(args):
 
     (chi2_dd, pval_dd) = chi2(X_all, y_dataset_discrim)
     dd_feats_inds = np.where(pval_dd > 0.05)[0]
-    X_train_domains = remove_nonpivot_columns(X_train, dd_feats_inds)
-    X_test_domains = remove_nonpivot_columns(X_test, dd_feats_inds)
+    X_train_domains = zero_nonpivot_columns(X_train, dd_feats_inds)
+    X_test_domains = zero_nonpivot_columns(X_test, dd_feats_inds)
     (l2_c, l2_f1) = find_best_c(X_train_domains, y_train, goal_ind)
     evaluate_and_print_scores(X_train_domains, y_train, X_test_domains, y_test, goal_ind, C=l2_c)
     del X_train_domains, X_test_domains
 
     print("Ben-david logic with feature selection intersection")
     intersect_inds = np.intersect1d(task_feats_inds, dd_feats_inds)
-    X_train_intersect = remove_nonpivot_columns(X_train, intersect_inds)
-    X_test_intersect = remove_nonpivot_columns(X_test, intersect_inds)
+    X_train_intersect = zero_nonpivot_columns(X_train, intersect_inds)
+    X_test_intersect = zero_nonpivot_columns(X_test, intersect_inds)
     (l2_c, l2_f1) = find_best_c(X_train_intersect, y_train, goal_ind)
     evaluate_and_print_scores(X_train_intersect, y_train, X_test_intersect, y_test, goal_ind, C=l2_c)
     del X_train_intersect, X_test_intersect
