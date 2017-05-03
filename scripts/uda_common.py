@@ -70,14 +70,14 @@ def align_test_X_train(X_train, X_test):
 
     return X_test
 
-def find_best_c(X_train, y_train, goal_ind, C_list = [0.01, 0.1, 1.0, 10.0], penalty='l2', dual=True):
-    scorer = make_scorer(f1_score, pos_label=goal_ind)
-    best_f1 = 0
+def find_best_c(X_train, y_train, C_list = [0.01, 0.1, 1.0, 10.0], penalty='l2', dual=True, scorer=f1_score, scorer_args={'greater_is_better':True}):
+    scorer = make_scorer(scorer, scorer_args)
+    best_score = 0
     best_c = 0
     for C in C_list:
-        f1 = np.average(cross_val_score(svm.LinearSVC(C=C, penalty=penalty, dual=dual), X_train, y_train, scoring=scorer))
-        if f1 > best_f1:
-            best_f1 = f1
+        score = np.average(cross_val_score(svm.LinearSVC(C=C, penalty=penalty, dual=dual), X_train, y_train, scoring=scorer))
+        if score > best_score:
+            best_score = score
             best_c = C
 
-    return best_c, best_f1
+    return best_c, best_score
