@@ -29,10 +29,17 @@ def main(args):
     source_ave = np.average(source_X.toarray(), 0)
     target_ave = np.average(target_X.toarray(), 0)
     dot_sim = source_ave.dot(target_ave)
+    ### Normalize and re-do:
+    source_ave /= source_ave.sum()
+    target_ave /= target_ave.sum()
+    cos_sim = sourcee_ave.dot(target_ave)
+
     # This function computes kl-divergence if given 2 arguments and does the normalizatino for you:
     kl = scipy.stats.entropy(source_ave+0.01, target_ave+0.01)
-    print("Raw dot product is %f, kl divergence is %f" % (dot_sim, kl))
+    print("Raw dot product is %f, cos sim is %f, kl divergence is %f" % (dot_sim, cos_sim, kl))
 
+    # Last variable is how well can we predict pivot features with non-pivot features:
+    
 
 if __name__ == '__main__':
     args = sys.argv[1:]
