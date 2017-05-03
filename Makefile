@@ -38,3 +38,6 @@ pivot_data/%/theta_svd.pkl: pivot_data/%/pivots_done.txt
 
 %.eval: %.pivots $$(call source,%).liblinear0 $$(call target,%).liblinear0 pivot_data/%/theta_svd.pkl
 	python scripts/transform_features.py $(call source,$*).liblinear0 $(call target,$*).liblinear0 pivot_data/$*/ $*.pivots > $@
+
+%.compare: $$(call source,%).liblinear0 $$(call target,%).liblinear0
+	python scripts/compute_adaptation_variables.py $(call source,$*).liblinear0 $(call target,$*).liblinear0 > $@
