@@ -6,7 +6,7 @@ from sklearn.metrics import f1_score, recall_score, precision_score, accuracy_sc
 from sklearn.model_selection import cross_val_score
 
 def zero_pivot_columns(matrix, pivots):
-    matrix_lil = matrix.tolil()
+    matrix_lil = scipy.sparse.lil_matrix(matrix, copy=True)
     for pivot in pivots:
         matrix_lil[:,pivot] = 0.0
 
@@ -75,7 +75,7 @@ def find_best_c(X_train, y_train, C_list = [0.01, 0.1, 1.0, 10.0], penalty='l2',
     best_score = 0
     best_c = 0
     for C in C_list:
-        score = np.average(cross_val_score(svm.LinearSVC(C=C, penalty=penalty, dual=dual), X_train, y_train, scoring=scorer))
+        score = np.average(cross_val_score(svm.LinearSVC(C=C, penalty=penalty, dual=dual), X_train, y_train, scoring=scorer, n_jobs=1))
         if score > best_score:
             best_score = score
             best_c = C
