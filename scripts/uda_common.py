@@ -39,6 +39,12 @@ def get_preds(X_train, y_train, X_test, C=1.0, sample_weight=None, penalty='l2',
     preds = svc.predict(X_test)
     return preds
 
+def get_decisions(X_train, y_train, X_test, C=1.0, sample_weight=None, penalty='l2', loss='squared_hinge', dual=True):
+    svc = svm.LinearSVC(C=C, penalty=penalty, loss=loss, dual=dual)
+    svc.fit(X_train, y_train, sample_weight=sample_weight)
+    preds = svc.decision_function(X_test)
+    return preds
+
 def get_f1(X_train, y_train, X_test, y_test, score_label, C=1.0, sample_weight=None, penalty='l2', loss='squared_hinge', dual=True):
     preds = get_preds(X_train, y_train, X_test, C=C, sample_weight=None, penalty='l2', loss='squared_hinge', dual=True)
     f1 = f1_score(y_test, preds, pos_label=score_label)
@@ -70,8 +76,8 @@ def align_test_X_train(X_train, X_test):
 
     return X_test
 
-def find_best_c(X_train, y_train, C_list = [0.01, 0.1, 1.0, 10.0], penalty='l2', dual=True, scorer=f1_score, scorer_args={'greater_is_better':True}):
-    scorer = make_scorer(scorer, scorer_args)
+def find_best_c(X_train, y_train, C_list = [0.01, 0.1, 1.0, 10.0], penalty='l2', dual=True, scorer=f1_score, **scorer_args):
+    scorer = make_scorer(scorer, **scorer_args)
     best_score = 0
     best_c = 0
     for C in C_list:
