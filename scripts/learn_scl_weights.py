@@ -8,12 +8,10 @@ import numpy as np
 import pickle
 import sys
 
-## Default value from Blitzer et al.
-proj_dim = 25
 
 def main(args):
-    if len(args) < 1:
-        sys.stderr.write("One required argument: <data directory>\n\n")
+    if len(args) < 2:
+        sys.stderr.write("Two required arguments: <data directory> <output file>\n\n")
         sys.exit(-1)
 
     data_dir = args[0]
@@ -21,7 +19,7 @@ def main(args):
     weight_matrix = None
 
     for ind,f in enumerate(files):
-        print("Loading file %s for classification" % (f))
+        sys.stderr.write("Loading file %s for classification\n" % (f))
         X_train, y_train = load_svmlight_file(f)
         ## Weight matrix is supposed to be n x p, n non-pivot features by p pivot features
         ## Here we just zeroed out all the pivot features in the pre-process, so we
@@ -37,20 +35,10 @@ def main(args):
 
         weight_matrix[:,ind] = clf.coef_
 
-    full_out = open(join(data_dir, 'theta_full.pkl'), 'wb')
+    sys.stderr.write('Writing full theta matrix\n')
+    full_out = open(join(data_dir, args[1]), 'wb')
     pickle.dump(weight_matrix, full_out)
     full_out.close()
-
-    ## Compute svd to get low-dimensional projection
-    [U, s, Vh] = svd(weight_matrix, full_matrices=True)
-    ## U is n x n. Take subset of rows to get d x n, then transpose to get n x d
-    theta = U[0:proj_dim, :].transpose()
-    ## theta is now an n x d projection from the non-pivot feature space into
-    ## the d-dimensional correspondence space.
-    theta_out = open(join(data_dir, 'theta_svd.pkl'), 'wb')
-    pickle.dump(theta, theta_out)
-    theta_out.close()
-
 
 if __name__ == '__main__':
     args = sys.argv[1:]

@@ -5,7 +5,7 @@ from sklearn.datasets import load_svmlight_file
 from sklearn.metrics import accuracy_score
 import scipy.sparse
 import scipy.stats
-from uda_common import zero_pivot_columns, zero_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c, get_preds
+from uda_common import zero_pivot_columns, zero_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c, get_preds, get_decisions
 from sklearn import svm
 
 def main(args):
@@ -48,6 +48,18 @@ def main(args):
     gold_prev = len(np.where(source_y==goal_ind)[0]) / float(len(source_y))
     target_prev = len(np.where(target_preds==goal_ind)[0]) / float(len(target_preds))
     print("Gold goal prevalence is %f compared to predicted target prevalence of %f" % (gold_prev, target_prev))
+
+    ## Get maximum loss:
+    ## Use the same c as above
+    target_scores = get_decisions(source_X, source_y, target_X, C=c)
+    target_y_norm = np.zeros(target_y.shape) - 1
+    positive_inds = np.where(target_y == goal_ind)[0]
+    target_y_norm[positive_inds] = 1
+    losses = target_y_norm - target_scores
+    ave_loss = np.mean(abs(losses))
+    print("Average loss for target instance is %f, max=%f, min=%f" % (ave_loss, max(losses), min(losses)))
+    for loss in losses:
+        print("#Loss: %f\n" % (loss))
 
     # Last variable is how well can we predict pivot features with non-pivot features:
     # pivots = read_pivots(args[2])

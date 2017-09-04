@@ -8,7 +8,7 @@ do
   do
     if [ $source != $target ];
     then
-      make $source+$target+scl.eval || exit
+      make $source+$target+gt50feats.eval || exit
     fi
   done
 done

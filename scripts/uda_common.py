@@ -87,3 +87,16 @@ def find_best_c(X_train, y_train, C_list = [0.01, 0.1, 1.0, 10.0], penalty='l2',
             best_c = C
 
     return best_c, best_score
+
+def read_feature_groups(groups_file):
+    ## The feature groups file unfortunately has to be adjusted here. The
+    ## files written by cleartk are 1-indexed, but the reader that reads them
+    ## in "helpfully" adjusts all the indices. So when we read them in we
+    ## decrement them all.
+    map = {}
+    with open(groups_file, 'r') as f:
+        for line in f:
+            domain, indices = line.split(' : ')
+            map[domain] = [int(f)-1 for f in indices.split(',')]
+
+    return map

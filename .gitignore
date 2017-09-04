@@ -8,6 +8,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+scl_env/
 env/
 build/
 develop-eggs/
@@ -23,6 +24,7 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+*.pkl
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -88,4 +90,9 @@ ENV/
 # Rope project settings
 .ropeproject
 
-*.liblinear
+*.npy
+*.liblinear*
+*.model
+*.pivots
+*.eval
+data/
