@@ -11,30 +11,32 @@ joindot = $(subst $(space),.,$(join $1,$2))
 .SECONDEXPANSION:
 .PRECIOUS: %.liblinear0
 
-%.liblinear0: %.liblinear
+%_reduced.liblinear0: %.liblinear
 	python scripts/reindex_liblinear.py $^ > $@
 
-## Learning pivots based on absolute frequency over two corpora:
-%+freq.pivots: $$(call source,%).liblinear0 $$(call target,%).liblinear0
-	cat $^ | ./scripts/extract_pivots_by_frequency_liblinear.sh > $@
+%/gt50feats.pivots: %/training-data_reduced.liblinear0 %/reduced-feature-groups.txt
+	python scripts/create_freq_pivots.py $^ > $@
 
-## Selecting pivots based on those that occur with frequency > 50 in both corpora:
-%-gt50feats.txt: %.liblinear0
-	cat $^ | perl -pe 's/^\S+\s+//' | perl -pe 's/(\d+):(\S+)/\1/g;s/ /\n/g' | sort -n | uniq -c | sort -n | awk '$$1 >= 50' | awk '{print $$2}' | sort -n  > $@
+## TODO: Update to use single data file and feature groups file
+#%+mi.pivots: $$(call source,%).liblinear0 $$(call target,%).liblinear0
+#	python scripts/create_mi_pivots.py $^ > $@
 
-%+scl.pivots: $$(call source,%)-gt50feats.txt $$(call target,%)-gt50feats.txt
-	cat $^ | sort | uniq -c | grep " 2 " | awk '{print $$2}' | grep -v "^0" | sort -n > $@
+%_test.txt: %.pivots
+	echo $(dir $*.pivots)/training-data.liblinear0 > $@
 
-%+mi.pivots: $$(call source,%).liblinear0 $$(call target,%).liblinear0
-	python scripts/create_mi_pivots.py $^ > $@
-
-pivot_data/%/pivots_done.txt: %.pivots $$(call source,%).liblinear0 $$(call target,%).liblinear0
-	mkdir -p pivot_data/$*
-	python scripts/build_pivot_training_data.py $^ pivot_data/$* > $@
+%_pivots_done.txt: %.pivots $$(dir %.pivots)training-data_reduced.liblinear0
+	mkdir -p $*_pivot_data
+	python scripts/build_pivot_training_data.py $^ $*_pivot_data > $@
 
 .PRECIOUS: pivot_data/%/theta_svd.pkl
-pivot_data/%/theta_svd.pkl: pivot_data/%/pivots_done.txt
-	python scripts/learn_scl_weights.py pivot_data/$*
+%_theta_full.pkl: %_pivots_done.txt
+	python scripts/learn_scl_weights.py $*_pivot_data $@
+
+%_theta_svd.pkl: %_theta_full.pkl
+	python scripts/reduce_matrix.py $^ $@
+
+%.scl.eval: $$(dir %.pivots)training-data_reduced.liblinear0 %.pivots %_theta_svd.pkl
+	python scripts/eval_scl.py $^ > $@
 
 %.eval: %.pivots $$(call source,%).liblinear0 $$(call target,%).liblinear0 pivot_data/%/theta_svd.pkl
 	python scripts/transform_features.py $(call source,$*).liblinear0 $(call target,$*).liblinear0 pivot_data/$*/ $*.pivots > $@

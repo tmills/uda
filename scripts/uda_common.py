@@ -12,7 +12,8 @@ def zero_pivot_columns(matrix, pivots):
 
     return matrix_lil.tocsr()
 
-def zero_nonpivot_columns(matrix, pivots):
+def zero_nonpivot_columns(array, pivots):
+    matrix = np.matrix(array, copy=False)
     matrix_return = np.matrix(np.zeros(matrix.shape))
 
     for pivot in pivots:
@@ -88,7 +89,7 @@ def find_best_c(X_train, y_train, C_list = [0.01, 0.1, 1.0, 10.0], penalty='l2',
 
     return best_c, best_score
 
-def read_feature_groups(groups_file):
+def read_feature_groups(groups_file, offset=0):
     ## The feature groups file unfortunately has to be adjusted here. The
     ## files written by cleartk are 1-indexed, but the reader that reads them
     ## in "helpfully" adjusts all the indices. So when we read them in we
@@ -97,6 +98,25 @@ def read_feature_groups(groups_file):
     with open(groups_file, 'r') as f:
         for line in f:
             domain, indices = line.split(' : ')
-            map[domain] = [int(f)-1 for f in indices.split(',')]
+            map[domain] = [int(f)+offset for f in indices.split(',')]
 
     return map
+
+def read_feature_lookup(lookup_file, offset=0):
+    ## The feature groups file unfortunately has to be adjusted here. The
+    ## files written by cleartk are 1-indexed, but the reader that reads them
+    ## in "helpfully" adjusts all the indices. So when we read them in we
+    ## decrement them all.
+    map = {}
+    with open(lookup_file, 'r') as f:
+        for line in f:
+            name, ind = line.rstrip().split(' : ')
+            map[int(ind)+offset] = name
+
+    ## The first feature in our data is the bias feature, always set to 1:
+    list = ['Bias']
+
+    for i in sorted(map.keys()):
+        list.append(map[i])
+
+    return list

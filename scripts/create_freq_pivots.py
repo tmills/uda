@@ -6,7 +6,7 @@ import numpy as np
 
 def main(args):
     if len(args) < 2:
-        sys.stderr.write("One required argument:  <training data> <feature group file> [freq=50]\n")
+        sys.stderr.write("One required argument: <training data> <feature group file> [freq=50]\n")
         sys.exit(-1)
 
     freq_cutoff = 50 if len(args) <=2 else args[2]
@@ -20,7 +20,7 @@ def main(args):
 
     data_X = []
     ## To start with, the set of valid_inds is all indices
-    ## This allows the zero index as a pivot (probably the intercept)
+    ## This prevents the zero index as a pivot (probably the intercept)
     valid_inds = set(range(1, num_feats))
     ## Create a subset for each domain:
     for domain_ind in domain_indices:

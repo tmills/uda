@@ -14,14 +14,13 @@ def main(args):
 
     pivot_file = args[0]
     model_dir = dirname(pivot_file)
-    group_name = join(model_dir, 'feature-groups.txt')
+    group_name = join(model_dir, 'reduced-feature-groups.txt')
     group_map = read_feature_groups(group_name)
 
     out_dir = args[2]
 
     sys.stderr.write("Reading in data files\n")
     all_X, all_y = load_svmlight_file(args[1])
-
     num_instances, num_feats = all_X.shape
 
     sys.stderr.write("Reading in pivot files and creating pivot labels dictionary\n")

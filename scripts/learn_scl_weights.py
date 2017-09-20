@@ -36,7 +36,7 @@ def main(args):
         weight_matrix[:,ind] = clf.coef_
 
     sys.stderr.write('Writing full theta matrix\n')
-    full_out = open(join(data_dir, args[1]), 'wb')
+    full_out = open(args[1], 'wb')
     pickle.dump(weight_matrix, full_out)
     full_out.close()
 
