@@ -3,15 +3,19 @@ import sys
 from uda_common import read_feature_groups
 from sklearn.datasets import load_svmlight_file
 import numpy as np
+from os.path import dirname, join
 
 def main(args):
-    if len(args) < 2:
-        sys.stderr.write("One required argument: <training data> <feature group file> [freq=50]\n")
+    if len(args) < 1:
+        sys.stderr.write("One required argument: <reduced training data> [freq=50]\n")
         sys.exit(-1)
 
-    freq_cutoff = 50 if len(args) <=2 else args[2]
+    freq_cutoff = 50 if len(args) <=1 else args[1]
+    data_dir = dirname(args[0])
+    groups_file = join(data_dir, 'reduced-feature-groups.txt')
+
     ## Find the feature index that tells us what domain we're in:
-    group_map = read_feature_groups(args[1])
+    group_map = read_feature_groups(groups_file)
     domain_indices = group_map["Domain"]
 
     ## load the data:

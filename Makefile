@@ -14,7 +14,7 @@ joindot = $(subst $(space),.,$(join $1,$2))
 %_reduced.liblinear0: %.liblinear
 	python scripts/reindex_liblinear.py $^ > $@
 
-%/gt50feats.pivots: %/training-data_reduced.liblinear0 %/reduced-feature-groups.txt
+%/gt50feats.pivots: %/training-data_reduced.liblinear0
 	python scripts/create_freq_pivots.py $^ > $@
 
 ## TODO: Update to use single data file and feature groups file
@@ -35,6 +35,7 @@ joindot = $(subst $(space),.,$(join $1,$2))
 %_theta_svd.pkl: %_theta_full.pkl
 	python scripts/reduce_matrix.py $^ $@
 
+#%.joint.eval: %
 %.scl.eval: $$(dir %.pivots)training-data_reduced.liblinear0 %.pivots %_theta_svd.pkl
 	python scripts/eval_scl.py $^ > $@
 

@@ -49,7 +49,7 @@ def main(args):
         num_test_instances = X_test.shape[0]
 
         (l2_c, l2_f1) = find_best_c(X_test, y_test, scorer=f1_score, pos_label=goal_ind)
-        print("Target-target score after tuning is %f" % (l2_f1))
+        print("Target-target f1 score after tuning is %f" % (l2_f1))
 
         for fold in [0,1]:
             split_ind = num_test_instances // 2
