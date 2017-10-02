@@ -28,7 +28,7 @@ joindot = $(subst $(space),.,$(join $1,$2))
 	mkdir -p $*_pivot_data
 	python scripts/build_pivot_training_data.py $^ $*_pivot_data > $@
 
-.PRECIOUS: pivot_data/%/theta_svd.pkl
+.PRECIOUS: pivot_data/%/theta_full.pkl
 %_theta_full.pkl: %_pivots_done.txt
 	python scripts/learn_scl_weights.py $*_pivot_data $@
 
