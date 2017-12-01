@@ -32,9 +32,6 @@ def main(args):
         pivots.append(pivot)
         pivot_labels[pivot] = np.zeros((num_instances,1))
         pivot_labels[pivot] += np.round(all_X[:,pivot]).toarray()
-        #pivot_labels[pivot][:num_instances] += X_train[:,pivot]
-        #pivot_labels[pivot][num_instances:] += X_test[:,pivot]
-        #pivot_labels[pivot] = np.round(pivot_labels[pivot])
 
     sys.stderr.write("Creating pivot matrices for each feature group\n")
     #ind_groups = [None] * num_feats
@@ -49,23 +46,6 @@ def main(args):
                 print('Writing file %s ' % out_file)
                 sys.stderr.write('.')
                 dump_svmlight_file(group_X, pivot_labels[group_ind][:,0], out_file)
-
-    #     for ind in group_map[domain]:
-    #         ind_groups[ind] = domain
-    # sys.stderr.write("Creating pivot training data matrix\n")
-    # pivot_data = np.zeros((num_instances+num_test_instances, num_feats))
-    # pivot_data[:num_instances,:] += X_train
-    # pivot_data[num_instances:,:] += X_test
-    # sys.stderr.write("Converting pivot-aware matrix to sparse format\n")
-    # ## csc does 47 in a minute, lil does 39 in a minute., csr does 47 in a minute, coo does 48
-    # ## dok does 37
-    # pivot_data = scipy.sparse.coo_matrix(pivot_data)
-    #
-    # for pivot in pivots:
-    #     out_file = join(out_dir, 'pivot_%s-training.liblinear' % pivot)
-    #     print("Writing file %s " % out_file)
-    #     sys.stderr.write('.')
-    #     dump_svmlight_file(pivot_data, pivot_labels[pivot][:,0], out_file)
 
     sys.stderr.write('\n')
 

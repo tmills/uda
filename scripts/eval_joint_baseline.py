@@ -4,7 +4,7 @@ import numpy as np
 import pickle
 from sklearn.datasets import load_svmlight_file, dump_svmlight_file
 from sklearn.metrics import f1_score
-from uda_common import zero_pivot_columns, zero_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c, read_feature_groups
+from uda_common import zero_pivot_columns, zero_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c, read_feature_groups, read_feature_lookup
 import os
 import scipy.sparse
 import sys
@@ -35,9 +35,13 @@ def main(args):
     domain_map = read_feature_groups(join(dirname(args[0]), 'reduced-feature-groups.txt'))
     domain_inds = domain_map['Domain']
 
+    feature_map = read_feature_lookup(join(dirname(args[0]), 'reduced-features-lookup.txt'))
+
     for direction in [0,1]:
         score_ave = 0
-        sys.stderr.write("using index %d as train\n"  %(domain_inds[0]))
+        sys.stderr.write("using domain %s as source, %s as target\n"  %
+            (feature_map[domain_inds[direction]],feature_map[domain_inds[1-direction]]))
+
         train_instance_inds = np.where(all_X[:,domain_inds[direction]].toarray() > 0)[0]
         X_train = all_X[train_instance_inds,:]
         y_train = all_y[train_instance_inds]

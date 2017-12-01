@@ -26,8 +26,8 @@ def main(args):
     combined_X[num_source_instances:,:] += target_X
     domain_y = np.zeros(num_source_instances+num_target_instances)
     domain_y[:num_source_instances] = 1
-    c, acc = find_best_c(combined_X, domain_y, scorer=accuracy_score)
-    print("Best performance for telling domains apart is %f" % (acc))
+    c, domain_diff_acc = find_best_c(combined_X, domain_y, scorer=accuracy_score)
+    print("Best performance for telling domains apart is %f" % (domain_diff_acc))
 
     ## Second adaptation variable: cosine similarity between vector averages
     source_ave = np.average(source_X.toarray(), 0)
@@ -80,6 +80,7 @@ def main(args):
     # med_acc = np.median(accuracies)
     # print("Average accuracy at pivot prediction is %f, median accuracy is %f" %(ave_acc, med_acc))
 
+    print("%f, %f, %d, %f, %f, %f" % (domain_diff_acc, cos_sim, source_X.shape[0], gold_prev, target_prev, 0.0))
 
 if __name__ == '__main__':
     args = sys.argv[1:]
