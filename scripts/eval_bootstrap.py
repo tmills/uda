@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 import numpy as np
 import os
 from sklearn import svm
@@ -32,6 +32,21 @@ def main(args):
     print("Optimizing l1 with cross-validation gives C=%f and f1=%f" % (l1_c, l1_f1))
     (l2_c, l2_f1) = find_best_c(X_train, y_train, goal_ind)
     print("Optimizing l2 with cross-validation gives C=%f and f1=%f" % (l2_c, l2_f1))
+
+    print("Tuning regularization parameter on gold+silver:")
+    svc = svm.LinearSVC(penalty='l2', C=l2_c)
+    svc.fit()
+    preds = svc.predict(X_test)  # predict should return 0/1 (maybe experiment with weights?)
+    train_plus_test_X = np.zeros((num_instances+num_test_instances, num_feats))
+    train_plus_text_X[:num_instances, :] += X_train
+    train_plus_test_X[num_instances:, :] += X_test
+    train_plus_test_y = np.zeros(num_instances+num_test_instances)
+    train_plus_test_y[:num_instances] += y_train
+    train_plus_test_y[num_instances:] += preds
+    (gs_l2_c, gs_l2_f1) = find_best_c(train_plus_test_X, train_plus_test_y, goal_ind)
+    print(" Optimized l2 for gold+silver: %f" % (gs_l2_f1))
+    evaluate_and_print_scores(train_plus_test_X, train_plus_test_y, X_test, y_test, goal_ind, gs_l2_c)
+    del train_plus_test_X, train_plus_test_y
 
     print("Balanced bootstrapping method (add equal amounts of true/false examples)")
     for percentage in [0.01, 0.1, 0.25]:
