@@ -1,110 +1,127 @@
 #!/usr/bin/env python
 import numpy as np
 import os
+from os.path import join,exists,dirname
 from sklearn import svm
 import sys
 
 from sklearn.datasets import load_svmlight_file, dump_svmlight_file
-from uda_common import evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c
+from sklearn.metrics import f1_score
+from uda_common import evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c, read_feature_groups, read_feature_lookup
 
 def main(args):
-    if len(args) < 2:
-        sys.stderr.write("Required argument(s): <labeled source data> <labeled target data>\n\n")
+    if len(args) < 1:
+        sys.stderr.write("Required argument(s): <combined data>\n\n")
         sys.exit(-1)
 
     goal_ind = 2
-    (source_file, target_file) = args
+    data_file = args[0]
+    data_dir = dirname(data_file)
 
-    print("Reading input data from %s" % (source_file))
-    X_train, y_train = load_svmlight_file(source_file, dtype='float32')
-    num_instances, num_feats = X_train.shape
-    print("  Data has %d instances and %d features" % (num_instances, num_feats))
+    print("Reading input data from %s" % (data_file))
+    all_X, all_y = load_svmlight_file(data_file)
+    num_total_instances, num_feats = all_X.shape
 
-    X_test, y_test = load_svmlight_file(target_file)
-    X_test = align_test_X_train(X_train, X_test)
-    num_test_instances = X_test.shape[0]
+    domain_map = read_feature_groups(join(data_dir, 'reduced-feature-groups.txt'))
+    domain_inds = domain_map['Domain']
 
-    print("Original feature space evaluation (AKA no adaptation, AKA pivot+non-pivot)")
-    ## C < 1 => more regularization
-    ## C > 1 => more fitting to training
-    C_list = [0.001, 0.01, 0.1, 1.0, 10.0]
-    (l1_c, l1_f1) = find_best_c(X_train, y_train, goal_ind, penalty='l1', dual=False)
-    print("Optimizing l1 with cross-validation gives C=%f and f1=%f" % (l1_c, l1_f1))
-    (l2_c, l2_f1) = find_best_c(X_train, y_train, goal_ind)
-    print("Optimizing l2 with cross-validation gives C=%f and f1=%f" % (l2_c, l2_f1))
+    feature_map = read_feature_lookup(join(data_dir, 'reduced-features-lookup.txt'))
 
-    print("Tuning regularization parameter on gold+silver:")
-    svc = svm.LinearSVC(penalty='l2', C=l2_c)
-    svc.fit()
-    preds = svc.predict(X_test)  # predict should return 0/1 (maybe experiment with weights?)
-    train_plus_test_X = np.zeros((num_instances+num_test_instances, num_feats))
-    train_plus_text_X[:num_instances, :] += X_train
-    train_plus_test_X[num_instances:, :] += X_test
-    train_plus_test_y = np.zeros(num_instances+num_test_instances)
-    train_plus_test_y[:num_instances] += y_train
-    train_plus_test_y[num_instances:] += preds
-    (gs_l2_c, gs_l2_f1) = find_best_c(train_plus_test_X, train_plus_test_y, goal_ind)
-    print(" Optimized l2 for gold+silver: %f" % (gs_l2_f1))
-    evaluate_and_print_scores(train_plus_test_X, train_plus_test_y, X_test, y_test, goal_ind, gs_l2_c)
-    del train_plus_test_X, train_plus_test_y
+    for direction in [0,1]:
+        sys.stderr.write("using domain %s as source, %s as target\n"  %
+            (feature_map[domain_inds[direction]],feature_map[domain_inds[1-direction]]))
 
-    print("Balanced bootstrapping method (add equal amounts of true/false examples)")
-    for percentage in [0.01, 0.1, 0.25]:
-        svc = svm.LinearSVC()
+        train_instance_inds = np.where(all_X[:,domain_inds[direction]].toarray() > 0)[0]
+        X_train = all_X[train_instance_inds,:]
+        y_train = all_y[train_instance_inds]
+        num_train_instances = X_train.shape[0]
+
+        test_instance_inds = np.where(all_X[:,domain_inds[1-direction]].toarray() > 0)[0]
+        X_test = all_X[test_instance_inds,:]
+        y_test = all_y[test_instance_inds]
+        num_test_instances = X_test.shape[0]
+
+        print("Original feature space evaluation (AKA no adaptation, AKA pivot+non-pivot)")
+        ## C < 1 => more regularization
+        ## C > 1 => more fitting to training
+        # C_list = [0.001, 0.01, 0.1, 1.0, 10.0]
+        (l1_c, l1_f1) = find_best_c(X_train, y_train, scorer=f1_score, penalty='l1', dual=False, pos_label=goal_ind)
+        print("Optimizing l1 with cross-validation gives C=%f and f1=%f" % (l1_c, l1_f1))
+        (l2_c, l2_f1) = find_best_c(X_train, y_train, pos_label=goal_ind)
+        print("Optimizing l2 with cross-validation gives C=%f and f1=%f" % (l2_c, l2_f1))
+
+        print("Tuning regularization parameter on gold+silver:")
+        svc = svm.LinearSVC(penalty='l2', C=l2_c)
         svc.fit(X_train, y_train)
-        preds = svc.decision_function(X_test)
-        added_X = []
-        added_y = []
-        for i in range(int(percentage * num_test_instances)):
-            if i % 2 == 0:
+        preds = svc.predict(X_test)  # predict should return 0/1 (maybe experiment with weights?)
+        train_plus_test_X = np.zeros((num_train_instances+num_test_instances, num_feats))
+        train_plus_test_X[:num_train_instances, :] += X_train
+        train_plus_test_X[num_train_instances:, :] += X_test
+        train_plus_test_y = np.zeros(num_train_instances+num_test_instances)
+        train_plus_test_y[:num_train_instances] += y_train
+        train_plus_test_y[num_train_instances:] += preds
+        (gs_l2_c, gs_l2_f1) = find_best_c(train_plus_test_X, train_plus_test_y, pos_label=goal_ind)
+        print(" Optimized l2 for gold+silver: %f" % (gs_l2_c))
+        evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, gs_l2_c)
+        del train_plus_test_X, train_plus_test_y
+
+        print("Balanced bootstrapping method (add equal amounts of true/false examples)")
+        for percentage in [0.01, 0.1, 0.25]:
+            svc = svm.LinearSVC()
+            svc.fit(X_train, y_train)
+            preds = svc.decision_function(X_test)
+            added_X = []
+            added_y = []
+            for i in range(int(percentage * num_test_instances)):
+                if i % 2 == 0:
+                    highest_ind = preds.argmax()
+                    if preds[highest_ind] <= 0:
+                        break
+                else:
+                    highest_ind = preds.argmin()
+                    if preds[highest_ind] >= 0:
+                        break
+
+                added_X.append(X_test[highest_ind,:].toarray()[0])
+                added_y.append(1 if preds[highest_ind] < 0 else 2)
+                preds[highest_ind] = 0
+
+            print("Added %d instances from target dataset" % (len(added_y)))
+            train_plus_bootstrap_X = np.zeros((num_train_instances + len(added_y), num_feats))
+            train_plus_bootstrap_X[:num_train_instances, :] += X_train
+            train_plus_bootstrap_X[num_train_instances:, :] += np.array(added_X)
+            train_plus_bootstrap_y = np.zeros(num_train_instances + len(added_y))
+            train_plus_bootstrap_y[:num_train_instances] += y_train
+            train_plus_bootstrap_y[num_train_instances:] += np.array(added_y)
+            (l2_c, l2_f1) = find_best_c(train_plus_bootstrap_X, train_plus_bootstrap_y, pos_label=goal_ind)
+            evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
+            del train_plus_bootstrap_y, train_plus_bootstrap_X
+
+        print("Enriching bootstrapping method (add minority class examples only)")
+        for percentage in [0.01, 0.1, 0.25]:
+            svc = svm.LinearSVC()
+            svc.fit(X_train, y_train)
+            preds = svc.decision_function(X_test)
+            added_X = []
+            added_y = []
+            for i in range(int(percentage * num_test_instances)):
                 highest_ind = preds.argmax()
                 if preds[highest_ind] <= 0:
                     break
-            else:
-                highest_ind = preds.argmin()
-                if preds[highest_ind] >= 0:
-                    break
+                added_X.append(X_test[highest_ind,:].toarray()[0])
+                added_y.append(goal_ind)
+                preds[highest_ind] = 0
 
-            added_X.append(X_test[highest_ind,:].toarray()[0])
-            added_y.append(1 if preds[highest_ind] < 0 else 2)
-            preds[highest_ind] = 0
-
-        print("Added %d instances from target dataset" % (len(added_y)))
-        train_plus_bootstrap_X = np.zeros((num_instances + len(added_y), num_feats))
-        train_plus_bootstrap_X[:num_instances, :] += X_train
-        train_plus_bootstrap_X[num_instances:, :] += np.array(added_X)
-        train_plus_bootstrap_y = np.zeros(num_instances + len(added_y))
-        train_plus_bootstrap_y[:num_instances] += y_train
-        train_plus_bootstrap_y[num_instances:] += np.array(added_y)
-        (l2_c, l2_f1) = find_best_c(train_plus_bootstrap_X, train_plus_bootstrap_y, goal_ind)
-        evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
-        del train_plus_bootstrap_y, train_plus_bootstrap_X
-
-    print("Enriching bootstrapping method (add minority class examples only)")
-    for percentage in [0.01, 0.1, 0.25]:
-        svc = svm.LinearSVC()
-        svc.fit(X_train, y_train)
-        preds = svc.decision_function(X_test)
-        added_X = []
-        added_y = []
-        for i in range(int(percentage * num_test_instances)):
-            highest_ind = preds.argmax()
-            if preds[highest_ind] <= 0:
-                break
-            added_X.append(X_test[highest_ind,:].toarray()[0])
-            added_y.append(goal_ind)
-            preds[highest_ind] = 0
-
-        print("Added %d positive instances from target dataset" % (len(added_y)))
-        train_plus_bootstrap_X = np.zeros((num_instances + len(added_y), num_feats))
-        train_plus_bootstrap_X[:num_instances, :] += X_train
-        train_plus_bootstrap_X[num_instances:, :] += np.array(added_X)
-        train_plus_bootstrap_y = np.zeros(num_instances + len(added_y))
-        train_plus_bootstrap_y[:num_instances] += y_train
-        train_plus_bootstrap_y[num_instances:] += np.array(added_y)
-        (l2_c, l2_f1) = find_best_c(train_plus_bootstrap_X, train_plus_bootstrap_y, goal_ind)
-        evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
-        del train_plus_bootstrap_y, train_plus_bootstrap_X
+            print("Added %d positive instances from target dataset" % (len(added_y)))
+            train_plus_bootstrap_X = np.zeros((num_train_instances + len(added_y), num_feats))
+            train_plus_bootstrap_X[:num_train_instances, :] += X_train
+            train_plus_bootstrap_X[num_train_instances:, :] += np.array(added_X)
+            train_plus_bootstrap_y = np.zeros(num_train_instances + len(added_y))
+            train_plus_bootstrap_y[:num_train_instances] += y_train
+            train_plus_bootstrap_y[num_train_instances:] += np.array(added_y)
+            (l2_c, l2_f1) = find_best_c(train_plus_bootstrap_X, train_plus_bootstrap_y, pos_label=goal_ind)
+            evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
+            del train_plus_bootstrap_y, train_plus_bootstrap_X
 
 if __name__ == '__main__':
     args = sys.argv[1:]
