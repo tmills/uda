@@ -65,63 +65,63 @@ def main(args):
         evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, gs_l2_c)
         del train_plus_test_X, train_plus_test_y
 
-        print("Balanced bootstrapping method (add equal amounts of true/false examples)")
-        for percentage in [0.01, 0.1, 0.25]:
-            svc = svm.LinearSVC()
-            svc.fit(X_train, y_train)
-            preds = svc.decision_function(X_test)
-            added_X = []
-            added_y = []
-            for i in range(int(percentage * num_test_instances)):
-                if i % 2 == 0:
-                    highest_ind = preds.argmax()
-                    if preds[highest_ind] <= 0:
-                        break
-                else:
-                    highest_ind = preds.argmin()
-                    if preds[highest_ind] >= 0:
-                        break
+        # print("Balanced bootstrapping method (add equal amounts of true/false examples)")
+        # for percentage in [0.01, 0.1, 0.25]:
+        #     svc = svm.LinearSVC()
+        #     svc.fit(X_train, y_train)
+        #     preds = svc.decision_function(X_test)
+        #     added_X = []
+        #     added_y = []
+        #     for i in range(int(percentage * num_test_instances)):
+        #         if i % 2 == 0:
+        #             highest_ind = preds.argmax()
+        #             if preds[highest_ind] <= 0:
+        #                 break
+        #         else:
+        #             highest_ind = preds.argmin()
+        #             if preds[highest_ind] >= 0:
+        #                 break
 
-                added_X.append(X_test[highest_ind,:].toarray()[0])
-                added_y.append(1 if preds[highest_ind] < 0 else 2)
-                preds[highest_ind] = 0
+        #         added_X.append(X_test[highest_ind,:].toarray()[0])
+        #         added_y.append(1 if preds[highest_ind] < 0 else 2)
+        #         preds[highest_ind] = 0
 
-            print("Added %d instances from target dataset" % (len(added_y)))
-            train_plus_bootstrap_X = np.zeros((num_train_instances + len(added_y), num_feats))
-            train_plus_bootstrap_X[:num_train_instances, :] += X_train
-            train_plus_bootstrap_X[num_train_instances:, :] += np.array(added_X)
-            train_plus_bootstrap_y = np.zeros(num_train_instances + len(added_y))
-            train_plus_bootstrap_y[:num_train_instances] += y_train
-            train_plus_bootstrap_y[num_train_instances:] += np.array(added_y)
-            (l2_c, l2_f1) = find_best_c(train_plus_bootstrap_X, train_plus_bootstrap_y, pos_label=goal_ind)
-            evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
-            del train_plus_bootstrap_y, train_plus_bootstrap_X
+        #     print("Added %d instances from target dataset" % (len(added_y)))
+        #     train_plus_bootstrap_X = np.zeros((num_train_instances + len(added_y), num_feats))
+        #     train_plus_bootstrap_X[:num_train_instances, :] += X_train
+        #     train_plus_bootstrap_X[num_train_instances:, :] += np.array(added_X)
+        #     train_plus_bootstrap_y = np.zeros(num_train_instances + len(added_y))
+        #     train_plus_bootstrap_y[:num_train_instances] += y_train
+        #     train_plus_bootstrap_y[num_train_instances:] += np.array(added_y)
+        #     (l2_c, l2_f1) = find_best_c(train_plus_bootstrap_X, train_plus_bootstrap_y, pos_label=goal_ind)
+        #     evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
+        #     del train_plus_bootstrap_y, train_plus_bootstrap_X
 
-        print("Enriching bootstrapping method (add minority class examples only)")
-        for percentage in [0.01, 0.1, 0.25]:
-            svc = svm.LinearSVC()
-            svc.fit(X_train, y_train)
-            preds = svc.decision_function(X_test)
-            added_X = []
-            added_y = []
-            for i in range(int(percentage * num_test_instances)):
-                highest_ind = preds.argmax()
-                if preds[highest_ind] <= 0:
-                    break
-                added_X.append(X_test[highest_ind,:].toarray()[0])
-                added_y.append(goal_ind)
-                preds[highest_ind] = 0
+        # print("Enriching bootstrapping method (add minority class examples only)")
+        # for percentage in [0.01, 0.1, 0.25]:
+        #     svc = svm.LinearSVC()
+        #     svc.fit(X_train, y_train)
+        #     preds = svc.decision_function(X_test)
+        #     added_X = []
+        #     added_y = []
+        #     for i in range(int(percentage * num_test_instances)):
+        #         highest_ind = preds.argmax()
+        #         if preds[highest_ind] <= 0:
+        #             break
+        #         added_X.append(X_test[highest_ind,:].toarray()[0])
+        #         added_y.append(goal_ind)
+        #         preds[highest_ind] = 0
 
-            print("Added %d positive instances from target dataset" % (len(added_y)))
-            train_plus_bootstrap_X = np.zeros((num_train_instances + len(added_y), num_feats))
-            train_plus_bootstrap_X[:num_train_instances, :] += X_train
-            train_plus_bootstrap_X[num_train_instances:, :] += np.array(added_X)
-            train_plus_bootstrap_y = np.zeros(num_train_instances + len(added_y))
-            train_plus_bootstrap_y[:num_train_instances] += y_train
-            train_plus_bootstrap_y[num_train_instances:] += np.array(added_y)
-            (l2_c, l2_f1) = find_best_c(train_plus_bootstrap_X, train_plus_bootstrap_y, pos_label=goal_ind)
-            evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
-            del train_plus_bootstrap_y, train_plus_bootstrap_X
+        #     print("Added %d positive instances from target dataset" % (len(added_y)))
+        #     train_plus_bootstrap_X = np.zeros((num_train_instances + len(added_y), num_feats))
+        #     train_plus_bootstrap_X[:num_train_instances, :] += X_train
+        #     train_plus_bootstrap_X[num_train_instances:, :] += np.array(added_X)
+        #     train_plus_bootstrap_y = np.zeros(num_train_instances + len(added_y))
+        #     train_plus_bootstrap_y[:num_train_instances] += y_train
+        #     train_plus_bootstrap_y[num_train_instances:] += np.array(added_y)
+        #     (l2_c, l2_f1) = find_best_c(train_plus_bootstrap_X, train_plus_bootstrap_y, pos_label=goal_ind)
+        #     evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
+        #     del train_plus_bootstrap_y, train_plus_bootstrap_X
 
 if __name__ == '__main__':
     args = sys.argv[1:]

@@ -18,7 +18,7 @@ joindot = $(subst $(space),.,$(join $1,$2))
 
 ## Gt50 pivot selection method is symmetrical -- doesn't change based on which
 ## domain is source and which is target
-.PRECIOUS: %/gt50feats.pivots
+.PRECIOUS: %/gt50feats.pivots %/random.pivots %/mi-forward.pivots %/mi-backward.pivots
 %/gt50feats.pivots: %/training-data_reduced.liblinear0
 	python scripts/create_freq_pivots.py $^ > $@
 
@@ -44,6 +44,28 @@ joindot = $(subst $(space),.,$(join $1,$2))
 
 ## Have it depend on forward instead of plain because make may delete the intermediate file
 %/random-backward.pivots: %/random-forward.pivots
+	cp $^ $@
+
+## Pivots based on features that are not token-specific:
+%/non_token-forward.pivots: %/training-data_reduced.liblinear0
+	grep -v "Bag" $*/reduced-features-lookup.txt | grep -v "Following" | grep -v "Preceding" | grep -v "Covered" | grep -v "TreeFrag" | grep -v "Domain" | grep -v "SCORE" | perl -pe 's/^[^:]+ : (\d+)/\1/g' > $@
+
+%/non_token-backward.pivots: %/non_token-forward.pivots
+	cp $^ $@
+
+%/non_terminal-forward.pivots: %/training-data_reduced.liblinear0
+	grep "TreeFrag" $*/reduced-features-lookup.txt | grep -v "[a-z])" | perl -pe 's/^.+ : (\d+)/\1/g' > $@
+
+%/non_terminal-backward.pivots: %/non_terminal-forward.pivots
+	cp $^ $@
+
+stopword_patterns.txt: stopwords.txt
+	cat $^ | perl -pe 's/^(.*)$$/_\1 /g' > $@
+
+%/stopword-forward.pivots: stopword_patterns.txt %/training-data_reduced.liblinear0 
+	grep -f $< $*/reduced-features-lookup.txt | perl -pe 's/.*: (\d+)/\1/g' > $@
+
+%/stopword-backward.pivots: %/stopword-forward.pivots
 	cp $^ $@
 
 .PRECIOUS: %_pivots_done.txt
