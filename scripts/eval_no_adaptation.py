@@ -3,7 +3,7 @@ from os.path import join,exists,dirname
 import numpy as np
 import pickle
 from sklearn.datasets import load_svmlight_file, dump_svmlight_file
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, precision_recall_fscore_support
 from uda_common import zero_pivot_columns, zero_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c, read_feature_groups, read_feature_lookup
 import os
 import scipy.sparse
@@ -47,22 +47,26 @@ def main(args):
         clf = svm.LinearSVC(C=l2_c)
         clf.fit(X_train, y_train)
         y_predicted = clf.predict(X_test)
-        f1 = f1_score(y_test, y_predicted, pos_label=goal_ind)
-        print("F-score on test data is %f" % (f1))
+        # f1 = f1_score(y_test, y_predicted, pos_label=goal_ind)
+        p,r,f1,_ = precision_recall_fscore_support(y_test, y_predicted, average='binary', pos_label=goal_ind)
+        print("Precision,recall,F-score on test data is %f\t%f\t%f" % (p,r,f1))
 
-        best_c = best_f = 0
+        best_c = best_f = best_r = best_p = 0
         for c_exp in range(-3, 4):
             c = 10. ** c_exp
             #print("Testing with c=%f" % (c))
             clf = svm.LinearSVC(C=c)
             clf.fit(X_train, y_train)
             y_predicted = clf.predict(X_test)
-            f1 = f1_score(y_test, y_predicted, pos_label=goal_ind)
+            # f1 = f1_score(y_test, y_predicted, pos_label=goal_ind)
+            p,r,f1,_ = precision_recall_fscore_support(y_test, y_predicted, average='binary', pos_label=goal_ind)
             if f1 > best_f:
                 best_f = f1
+                best_r = r
+                best_p = p
                 best_c = c
 
-        print("F-score if we tune c=%f to test set i %f"%  (best_c, best_f))
+        print("P/R/F if we tune c=%f to optimize test set F score is %f\t%f\t%f"%  (best_c, best_p, best_r, best_f))
 
 
 
