@@ -54,16 +54,23 @@ def main(args):
         svc = svm.LinearSVC(penalty='l2', C=l2_c)
         svc.fit(X_train, y_train)
         preds = svc.predict(X_test)  # predict should return 0/1 (maybe experiment with weights?)
-        train_plus_test_X = np.zeros((num_train_instances+num_test_instances, num_feats))
-        train_plus_test_X[:num_train_instances, :] += X_train
-        train_plus_test_X[num_train_instances:, :] += X_test
-        train_plus_test_y = np.zeros(num_train_instances+num_test_instances)
-        train_plus_test_y[:num_train_instances] += y_train
-        train_plus_test_y[num_train_instances:] += preds
-        (gs_l2_c, gs_l2_f1) = find_best_c(train_plus_test_X, train_plus_test_y, pos_label=goal_ind)
-        print(" Optimized l2 for gold+silver: %f" % (gs_l2_c))
-        evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, gs_l2_c)
-        del train_plus_test_X, train_plus_test_y
+        decisions = svc.decision_function(X_test)
+
+        for threshold in (0.0, 1.0):
+            sys.stderr.write("Testing silver optimization with confidence threshold %f" % threshold)
+            confident_indices = np.where(np.abs(decisions) > threshold)[0]
+            num_added = len(confident_indices)
+
+            train_plus_test_X = np.zeros((num_train_instances+num_added, num_feats))
+            train_plus_test_X[:num_train_instances, :] += X_train
+            train_plus_test_X[num_train_instances:, :] += X_test[confident_indices, :]
+            train_plus_test_y = np.zeros(num_train_instances+num_added)
+            train_plus_test_y[:num_train_instances] += y_train
+            train_plus_test_y[num_train_instances:] += preds[confident_indices]
+            (gs_l2_c, gs_l2_f1) = find_best_c(train_plus_test_X, train_plus_test_y, pos_label=goal_ind)
+            print(" Optimized l2 for gold+silver: %f" % (gs_l2_c))
+            evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, gs_l2_c)
+            del train_plus_test_X, train_plus_test_y
 
         # print("Balanced bootstrapping method (add equal amounts of true/false examples)")
         # for percentage in [0.01, 0.1, 0.25]:
