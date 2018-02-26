@@ -2,3 +2,6 @@
 *.liblinear*
 *.pivots
 *.eval
+env/
+data/
+*.pyc
