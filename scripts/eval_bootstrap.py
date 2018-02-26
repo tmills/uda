@@ -72,12 +72,12 @@ def main(args):
             evaluate_and_print_scores(X_train, y_train, X_test, y_test, goal_ind, gs_l2_c)
             del train_plus_test_X, train_plus_test_y
 
-        #run_balanced_bootstrapping(X_train, y_train, X_test, y_test)
-        #run_enriched_bootstrapping(X_train, y_train, X_test, y_test)
+        run_balanced_bootstrapping(X_train, y_train, X_test, y_test, goal_ind)
+        #run_enriched_bootstrapping(X_train, y_train, X_test, y_test, goal_ind)
 
 
 
-def run_balanced_bootstrapping(X_train, y_train, X_test, y_test):
+def run_balanced_bootstrapping(X_train, y_train, X_test, y_test, goal_ind):
     print("Balanced bootstrapping method (add equal amounts of true/false examples)")
     num_train_instances = X_train.shape[0]
     num_feats = X_train.shape[1]
@@ -114,7 +114,7 @@ def run_balanced_bootstrapping(X_train, y_train, X_test, y_test):
         evaluate_and_print_scores(train_plus_bootstrap_X, train_plus_bootstrap_y, X_test, y_test, goal_ind, l2_c)
         del train_plus_bootstrap_y, train_plus_bootstrap_X
 
-def run_enriched_bootstrapping(X_train, y_train, X_test, y_test):
+def run_enriched_bootstrapping(X_train, y_train, X_test, y_test, goal_ind):
     print("Enriching bootstrapping method (add minority class examples only)")
     for percentage in [0.01, 0.1, 0.25]:
         svc = svm.LinearSVC()
