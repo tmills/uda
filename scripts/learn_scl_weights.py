@@ -2,7 +2,8 @@
 from sklearn.datasets import load_svmlight_file
 from os import listdir
 from os.path import isfile, join, basename, dirname
-from sklearn.linear_model import SGDClassifier
+# from sklearn.linear_model import SGDClassifier
+from sklearn.svm import LinearSVC
 from scipy.linalg import svd
 import numpy as np
 import pickle
@@ -40,7 +41,8 @@ def main(args):
         if weight_matrix is None:
             num_feats = X_train.shape[1]
             weight_matrix = np.zeros((num_feats, len(files)), dtype=np.float16)
-        clf = SGDClassifier(loss="modified_huber", penalty='none', fit_intercept=False)
+        # clf = SGDClassifier(loss="modified_huber", penalty='none', fit_intercept=False, random_state=718)
+        clf = LinearSVC(fit_intercept=False)
         clf.fit(X_train, y_train)
         coefs_out = open(join(data_dir, basename(f).replace('liblinear','model') ), 'wb')
         pickle.dump(clf, coefs_out)
