@@ -34,6 +34,8 @@ def main(args):
 
     for ind,f in enumerate(files):
         sys.stderr.write("Loading file %s for classification\n" % (f))
+        ## Since the script that created these idd not have domain index 
+        ## variables we don't need to worry about them here
         X_train, y_train = load_svmlight_file(f)
         ## Weight matrix is supposed to be n x p, n non-pivot features by p pivot features
         ## Here we just zeroed out all the pivot features in the pre-process, so we

@@ -58,6 +58,9 @@ def main(args):
     ## target domain is set to 0
     train_inds = np.where(all_X[:,target_domain_ind] == 0)[0]
     X_train = all_X[train_inds, :]
+    ## After finding the instances, zero out that feature so it isn't used for prediction:
+    X_train[:, source_domain_ind] = 0
+    X_train[:, target_domain_ind] = 0
     y_train = all_y[train_inds]
     nopivot_X_train = zero_pivot_columns(X_train, pivots)
     pivot_X_train = zero_nonpivot_columns(X_train, pivots)
@@ -66,6 +69,9 @@ def main(args):
     ## target domain is not 0
     test_inds = np.where(all_X[:,target_domain_ind] > 0)[0]
     X_test = all_X[test_inds,:]
+    ## After finding the instances, zero out that feature so it isn't used for prediction:
+    X_test[:, source_domain_ind] = 0
+    X_test[:, target_domain_ind] = 0
     y_test = all_y[test_inds]
 
     print("For target domain index %d there are %d training instances and %d test instances" % (target_domain_ind, X_train.shape[0], X_test.shape[0]))
