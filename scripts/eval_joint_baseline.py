@@ -44,11 +44,15 @@ def main(args):
 
         train_instance_inds = np.where(all_X[:,domain_inds[direction]].toarray() > 0)[0]
         X_train = all_X[train_instance_inds,:]
+        X_train[:, domain_inds[direction]] = 0
+        X_train[:, domain_inds[1-direction]] = 0
         y_train = all_y[train_instance_inds]
         num_train_instances = X_train.shape[0]
 
         test_instance_inds = np.where(all_X[:,domain_inds[1-direction]].toarray() > 0)[0]
         X_test = all_X[test_instance_inds,:]
+        X_test[:, domain_inds[direction]] = 0
+        X_test[:, domain_inds[1-direction]] = 0
         y_test = all_y[test_instance_inds]
         num_test_instances = X_test.shape[0]
 

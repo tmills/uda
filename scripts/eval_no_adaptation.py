@@ -63,7 +63,7 @@ def main(args):
 
         # f1 = f1_score(y_test, y_predicted, pos_label=goal_ind)
         p,r,f1,_ = precision_recall_fscore_support(y_test, y_predicted, average='binary', pos_label=goal_ind)
-        print("Precision,recall,F-score on test data is %f\t%f\t%f" % (p,r,f1))
+        print("Precision,recall,F-score on target data is %f\t%f\t%f" % (p,r,f1))
 
         best_c = best_f = best_r = best_p = predicted_prevalence = 0
         for c_exp in range(-10, 0):
