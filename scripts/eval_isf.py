@@ -26,17 +26,25 @@ def main(args):
     feature_map = read_feature_lookup(join(data_dir, 'reduced-features-lookup.txt'))
 
     print("Yu and Jiang method (50 similarity features)")
-    for direction in [0,]:
+    for direction in [0,1]:
         sys.stderr.write("using domain %s as source, %s as target\n"  %
             (feature_map[domain_inds[direction]],feature_map[domain_inds[1-direction]]))
 
+        source_domain_ind = domain_inds[direction]
+        target_domain_ind = domain_inds[1-direction]
         train_instance_inds = np.where(all_X[:,domain_inds[direction]].toarray() > 0)[0]
         X_train = all_X[train_instance_inds,:]
+        ## After finding the instances, zero out that feature so it isn't used for prediction:
+        X_train[:, source_domain_ind] = 0
+        X_train[:, target_domain_ind] = 0
         y_train = all_y[train_instance_inds]
         num_train_instances = X_train.shape[0]
 
         test_instance_inds = np.where(all_X[:,domain_inds[1-direction]].toarray() > 0)[0]
         X_test = all_X[test_instance_inds,:]
+        ## After finding the instances, zero out that feature so it isn't used for prediction:
+        X_test[:, source_domain_ind] = 0
+        X_test[:, target_domain_ind] = 0
         y_test = all_y[test_instance_inds]
         num_test_instances = X_test.shape[0]
 
