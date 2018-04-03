@@ -9,6 +9,8 @@ import sys
 from sklearn.datasets import load_svmlight_file, dump_svmlight_file
 from sklearn.metrics import f1_score, precision_recall_fscore_support
 from uda_common import evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c, read_feature_groups, read_feature_lookup
+from scipy.stats import rankdata
+from sklearn.feature_selection import chi2
 
 def main(args):
     if len(args) < 1:
@@ -37,6 +39,7 @@ def main(args):
         X_train = all_X[train_instance_inds,:]
         y_train = all_y[train_instance_inds]
         num_train_instances = X_train.shape[0]
+        chi, _ = chi2(X_train, y_train)
 
         test_instance_inds = np.where(all_X[:,domain_inds[1-direction]].toarray() > 0)[0]
         X_test = all_X[test_instance_inds,:]
@@ -75,12 +78,33 @@ def main(args):
         oracle_weights = svc.coef_[0]
         print("P/R/F if we tune c=%f to optimize test set F score is %f\t%f\t%f with prevalence %f"%  (best_c, best_p, best_r, best_f, predicted_prevalence))
 
+        print("*****************************")
+        tuned_norm_weights = np.abs(tuned_weights) / np.abs(tuned_weights).sum()
+        oracle_norm_weights = np.abs(oracle_weights) / np.abs(oracle_weights).sum()
+        norm_weight_diffs = tuned_norm_weights - oracle_norm_weights
+        norm_highest_diffs = np.argsort(norm_weight_diffs)
+        for ind in reversed(norm_highest_diffs[-10:]):
+            feature_name = feature_map[ind]
+            freq = X_train[:,ind].sum()
+            diff = tuned_norm_weights[ind] - oracle_norm_weights[ind]
+            print(" Feature %s (freq %0.1f, chi2=%0.4f) had normalized weight change %f (%f to %f)" % (feature_name, freq, chi[ind], diff, tuned_norm_weights[ind], oracle_norm_weights[ind]))
+
+        print("*****************************")
+        tuned_ranks = rankdata(np.abs(tuned_weights))
+        oracle_ranks = rankdata(np.abs(oracle_weights))
+        rank_differences = tuned_ranks - oracle_ranks
+        ranked_rank_differences = np.argsort(np.abs(rank_differences))
+        for ind in ranked_rank_differences[-10:]:
+            feature_name = feature_map[ind]
+            print(" Feature %s rank %0.1f -> %0.1f with oracle tuning (%f -> %f)" % (feature_name, tuned_ranks[ind], oracle_ranks[ind], tuned_weights[ind], oracle_weights[ind]))
+
+        print("*****************************")
         weight_differences = tuned_weights - oracle_weights
         highest_diff_inds = np.argsort(np.abs(weight_differences))
         for ind in reversed(highest_diff_inds[-10:]):
             feature_name = feature_map[ind]
             print(" Feature %s had value change from %f to %f after oracle regularization" % (feature_name, tuned_weights[ind], oracle_weights[ind]))
-        print()
+        print("")
 
 
 
