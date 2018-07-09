@@ -3,6 +3,7 @@ import sys
 from os.path import join,exists,dirname
 import random
 from datetime import datetime
+import time
 
 import numpy as np
 from numpy.random import randint
@@ -120,7 +121,7 @@ def main(args):
     # constants:
     goal_ind = 2
     domain_weight = 0.1
-    confusion_weight = 1
+    confusion_weight = 0.1
     reg_weight = 0.2
     lr = 0.01
     epochs = 10000
@@ -177,7 +178,8 @@ def main(args):
         task_loss_fn.cuda()
         domain_loss_fn.cuda()
 
-    optimizer = optim.SGD(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters())
+    # optimizer = optim.SGD(model.parameters(), lr=lr)
     model.train()
 
     # Main training loop
@@ -187,6 +189,7 @@ def main(args):
         epoch_loss = 0
         random.shuffle(inds)
 
+        epoch_start = time.time()
         # Do a training epoch:
         for source_ind in inds:
             model.zero_grad()
@@ -228,16 +231,6 @@ def main(args):
                             domain_weight * (domain_loss + target_domain_loss) + 
                             confusion_weight * (confusion_loss + target_confusion_loss) +
                             reg_weight * reg_term)
-            # Task only:
-            # total_loss = task_loss
-            # Domain only:
-            # total_loss = domain_loss + target_domain_loss
-            # Debugging with 2 domain classifiers:
-            # total_loss = domain_loss + domain2_loss + target_domain_loss + target_domain2_loss
-            # With regularization and DA term:
-            # total_loss = task_loss + domain_weight * (domain_loss + target_domain_loss) + reg_term
-            # With regularization only:
-            # total_loss = task_loss + reg_term
 
             total_loss.backward()
             epoch_loss += total_loss
@@ -285,7 +278,8 @@ def main(args):
         except:
             num_zeros = near_zeros = -1
 
-        print("[Source] Epoch %d: loss=%f\tnear_zero=%d\tnum_insts=%d\tdom_acc=%f\tdom_std=%f\tP=%f\tR=%f\tF=%f" % (epoch, epoch_loss, near_zeros, len(source_eval_y), domain_acc, domain_out_stdev, prec, recall, f1))
+        epoch_len = time.time() - epoch_start
+        print("[Source] Epoch %d [%0.1fs]: loss=%f\tnear_zero=%d\tnum_insts=%d\tdom_acc=%f\tdom_std=%f\tP=%f\tR=%f\tF=%f" % (epoch, epoch_len, epoch_loss, near_zeros, len(source_eval_y), domain_acc, domain_out_stdev, prec, recall, f1))
 
         if f1 > 0.8 and abs(domain_acc - 0.5) < 0.05:
             print("This model is accurate and confused between domains so we're writing it.")
