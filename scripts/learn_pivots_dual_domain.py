@@ -122,7 +122,7 @@ def main(args):
     goal_ind = 2
     domain_weight = 0.1
     confusion_weight = 0.1
-    reg_weight = 0.2
+    reg_weight = 0.1
     lr = 0.01
     epochs = 10000
 
@@ -184,6 +184,7 @@ def main(args):
 
     # Main training loop
     inds = np.arange(num_train_instances)
+    best_qualifying_f1 = 0
 
     for epoch in range(epochs):
         epoch_loss = 0
@@ -281,7 +282,6 @@ def main(args):
         epoch_len = time.time() - epoch_start
         print("[Source] Epoch %d [%0.1fs]: loss=%f\tnear_zero=%d\tnum_insts=%d\tdom_acc=%f\tdom_std=%f\tP=%f\tR=%f\tF=%f" % (epoch, epoch_len, epoch_loss, near_zeros, len(source_eval_y), domain_acc, domain_out_stdev, prec, recall, f1))
 
-        best qualifying_f1 = 0
         if f1 > 0.8 and f1 > best_qualifying_f1 and abs(domain_acc - 0.5) < 0.05:
             print("This model is the most accurate-to-date that is confused between domains so we're writing it.")
             best_qualifying_f1 = f1
