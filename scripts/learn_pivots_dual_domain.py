@@ -281,8 +281,10 @@ def main(args):
         epoch_len = time.time() - epoch_start
         print("[Source] Epoch %d [%0.1fs]: loss=%f\tnear_zero=%d\tnum_insts=%d\tdom_acc=%f\tdom_std=%f\tP=%f\tR=%f\tF=%f" % (epoch, epoch_len, epoch_loss, near_zeros, len(source_eval_y), domain_acc, domain_out_stdev, prec, recall, f1))
 
-        if f1 > 0.8 and abs(domain_acc - 0.5) < 0.05:
-            print("This model is accurate and confused between domains so we're writing it.")
+        best qualifying_f1 = 0
+        if f1 > 0.8 and f1 > best_qualifying_f1 and abs(domain_acc - 0.5) < 0.05:
+            print("This model is the most accurate-to-date that is confused between domains so we're writing it.")
+            best_qualifying_f1 = f1
             torch.save(model, 'model_epoch%04d_dt=%s.pt' % (epoch, date_str))
 
 if __name__ == '__main__':
