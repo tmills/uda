@@ -4,7 +4,7 @@ import sys
 
 import numpy as np
 import torch
-from learn_pivots_tm import PivotLearnerModel, StraightThroughLayer
+from learn_pivots_dual_domain import PivotLearnerModel, StraightThroughLayer
 
 def main(args):
     if len(args) < 1:
