@@ -18,6 +18,7 @@ class MultiLayerPredictorModel(nn.Module):
         self.model = nn.Sequential()
         self.model.add_module('input_layer', nn.Linear(input_features, hidden_nodes))
         self.model.add_module('relu1', nn.ReLU(True))
+#        self.model.add_module('dropout', nn.Dropout())
         self.model.add_module('output_layer', nn.Linear(hidden_nodes, pivot_features))
         self.model.add_module('sigout', nn.Sigmoid())
     
@@ -64,21 +65,23 @@ def main(args):
     if torch.cuda.is_available():
         cuda = True
 
-    if len(args) > 1:
-        backward = bool(args[1])
+    if len(args) > 2:
+        backward = bool(args[2])
         print("Direction is backward based on args=%s" % (args[1]))
     else:
         backward = False
         print("Direction is forward by default")
 
     # Define constants and hyper-params    
-    goal_ind = 2
     training_portion = 0.8
-    lr = 0.01
+    lr = 0.00000001
+    l1_weight = 10
     epochs = 100
     batch_size = 50
+    hidden_nodes= 200
     bce_loss = True
     nll_loss = False
+    class_weights = False
 
     # can't be 2 loss functions
     assert not bce_loss or not nll_loss
@@ -132,17 +135,19 @@ def main(args):
     dev_X = Variable(FloatTensor(all_X[dev_inds,:].toarray()))
     dev_Y = Variable(FloatTensor(all_Y[dev_inds,:]))
 
-    model = DirectPredictorModel(num_feats, num_pivots)
-#    model = MultiLayerPredictorModel(num_feats, num_pivots, hidden_nodes=500)
+    #model = DirectPredictorModel(num_feats, num_pivots)
+    model = MultiLayerPredictorModel(num_feats, num_pivots, hidden_nodes=hidden_nodes)
+
+    majority = all_Y.shape[0] - prevalences
+    majority_class_weights = torch.FloatTensor(prevalences / majority)
 
     if bce_loss:
         losses = [nn.BCELoss() for i in range(num_pivots)]
     elif nll_loss:
-        majority = all_Y.shape[0] - prevalences
-        majority_class_weights = prevalences / majority
         losses = [nn.NLLLoss(torch.FloatTensor([majority_class_weights[i], 1.])) for i in range(num_pivots)]
     else:
         losses = [nn.SoftMarginLoss() for i in range(num_pivots)]
+    l1_loss = nn.L1Loss()
 
     if cuda:
         dev_X = dev_X.cuda() 
@@ -150,13 +155,14 @@ def main(args):
         model.cuda()
         [loss_fn.cuda() for loss_fn in losses]
 
-    # optimizer = optim.Adam(model.parameters())
-    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
-    model.train()
+    optimizer = optim.Adam(model.parameters(), weight_decay=0.)
+    #optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
 
     for epoch in range(epochs):
         epoch_loss = 0
+        model.train()
         for batch in range( 1+ ( num_instances // batch_size ) ):
+           
             start_ind = batch * batch_size
             if start_ind >= num_train_instances:
                 #This happens if our number of instances is perfectly divisible by batch size (when batch_size=1 this is often).
@@ -164,11 +170,16 @@ def main(args):
             end_ind = num_train_instances if start_ind + batch_size >= num_train_instances else start_ind+batch_size
             batch_X = Variable(FloatTensor(train_X[start_ind:end_ind,:].toarray()))
             batch_Y = Variable(FloatTensor(train_Y[start_ind:end_ind,:]))
+
+            if class_weights:
+                batch_weights = batch_Y.data + (1 - batch_Y).data * majority_class_weights
+                optimizer.weights = batch_weights.cuda()
+
             if cuda:
                 batch_X = batch_X.cuda()
                 batch_Y = batch_Y.cuda()
 
-            # model outputs are 0/1, fix to -1/1 for sigmoid loss
+            # model outputs are 0/1, fix to -1/1 for soft margin loss
             preds = model.forward(batch_X)
             if not bce_loss:
                 preds = preds * 2 - 1
@@ -178,10 +189,17 @@ def main(args):
                 pivot_loss = losses[out_ind](preds[:,out_ind], batch_Y[:,out_ind])
                 sum_loss = sum_loss + pivot_loss
 
+            reg_loss = 0
+            for param in model.parameters():
+                reg_param = l1_loss(param, torch.zeros_like(param))
+                reg_loss = reg_loss + reg_param
+
+            sum_loss = sum_loss + l1_weight * reg_loss
             sum_loss.backward() 
             optimizer.step()
             epoch_loss += sum_loss.data
-       
+      
+        model.eval() 
         # model outputs are 0/1, move to -1/1
         pred_valid = model.forward(dev_X)
         if not bce_loss:
@@ -224,7 +242,14 @@ def main(args):
         assert correct.max().data.cpu().numpy()[0] <= 1
         accuracies = correct.sum(0) / pred_valid.shape[0]
         total_acc = correct.sum() / (num_pivots * pred_valid.shape[0])
-        print("Epoch %d has loss %f, p/r/f=%s/%s/%s total_acc=%f, with individual accuracies %s" % (epoch, epoch_loss, precs, recalls, f1s, total_acc, str(accuracies.data.cpu().numpy())))
+        if len(f1s) < 5:
+            print("Epoch %d has loss %f, p/r/f=%s/%s/%s total_acc=%f, with individual accuracies %s" % (epoch, epoch_loss, precs, recalls, f1s, total_acc, str(accuracies.data.cpu().numpy())))
+        else:
+            f1_str = '[min=%f, max=%f, ave=%f' % (f1s.min(), f1s.max(), f1s.mean() )
+            prec_str = '[min=%f, max=%f, ave=%f' % (precs.min(), precs.max(), precs.mean() )
+            recall_str = '[min=%f, max=%f, ave=%f' % (recalls.min(), recalls.max(), recalls.mean() )
+            print("Epoch %d has loss %f, p/r/f=%s/%s/%s total_acc=%f, with individual accuracies %s" % (epoch, epoch_loss, prec_str, recall_str, f1_str, total_acc, str(accuracies.data.cpu().numpy())))
+
 
 
 if __name__ == '__main__':
