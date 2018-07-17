@@ -131,6 +131,11 @@ def main(args):
     # Read the data:
     sys.stderr.write("Reading source data from %s\n" % (args[0]))
     all_X, all_y = load_svmlight_file(args[0])
+    maxes = all_X.max(0).toarray()
+    non_binary = np.where(maxes != 1.0)[1]
+    
+    all_X[:,0] = 0
+    all_X[:,non_binary] = 0
     
     # y is 1,2 by default, map to -1,1 for sigmoid training
     all_y -= 1   # 0/1
