@@ -75,10 +75,10 @@ def main(args):
     # Define constants and hyper-params    
     training_portion = 0.8
     lr = 0.00000001
-    l1_weight = 10
-    epochs = 100
-    batch_size = 50
-    hidden_nodes= 200
+    l1_weight = 0.0
+    epochs = 1000
+    batch_size = 200
+    hidden_nodes= 50
     bce_loss = True
     nll_loss = False
     class_weights = False
@@ -92,7 +92,7 @@ def main(args):
     all_X, _ = load_svmlight_file(args[0])
     # Read pivot values from X:
     pivot_map = read_pivots(args[1])
-    pivot_inds = pivot_map.keys()
+    pivot_inds = list(pivot_map.keys())
     pivot_inds.sort()
     # DEBUGGING
     # pivot_inds = [2,]
@@ -100,7 +100,8 @@ def main(args):
     all_Y = all_X[:, pivot_inds].toarray()
     assert all_Y.max() == 1 and all_Y.min() == 0
     prevalences = all_Y.sum(0)
-    print("Pivot prevalence: %s" % (str(prevalences)))
+    np.set_printoptions(suppress=True)
+    print("Pivot prevalence: %s" % (np.array2string(prevalences, precision=3)))
     # normalize y to -1/1 for softmarginloss
     if nll_loss:
         pass
@@ -154,6 +155,7 @@ def main(args):
         dev_Y = dev_Y.cuda()
         model.cuda()
         [loss_fn.cuda() for loss_fn in losses]
+        l1_loss.cuda()
 
     optimizer = optim.Adam(model.parameters(), weight_decay=0.)
     #optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
@@ -161,8 +163,8 @@ def main(args):
     for epoch in range(epochs):
         epoch_loss = 0
         model.train()
-        for batch in range( 1+ ( num_instances // batch_size ) ):
-           
+        for batch in range( 1+ ( num_train_instances // batch_size ) ):
+            model.zero_grad() 
             start_ind = batch * batch_size
             if start_ind >= num_train_instances:
                 #This happens if our number of instances is perfectly divisible by batch size (when batch_size=1 this is often).
@@ -242,13 +244,14 @@ def main(args):
         assert correct.max().data.cpu().numpy()[0] <= 1
         accuracies = correct.sum(0) / pred_valid.shape[0]
         total_acc = correct.sum() / (num_pivots * pred_valid.shape[0])
-        if len(f1s) < 5:
+        if len(f1s) < 5 or epoch % 10 == 0:
             print("Epoch %d has loss %f, p/r/f=%s/%s/%s total_acc=%f, with individual accuracies %s" % (epoch, epoch_loss, precs, recalls, f1s, total_acc, str(accuracies.data.cpu().numpy())))
         else:
-            f1_str = '[min=%f, max=%f, ave=%f' % (f1s.min(), f1s.max(), f1s.mean() )
-            prec_str = '[min=%f, max=%f, ave=%f' % (precs.min(), precs.max(), precs.mean() )
-            recall_str = '[min=%f, max=%f, ave=%f' % (recalls.min(), recalls.max(), recalls.mean() )
-            print("Epoch %d has loss %f, p/r/f=%s/%s/%s total_acc=%f, with individual accuracies %s" % (epoch, epoch_loss, prec_str, recall_str, f1_str, total_acc, str(accuracies.data.cpu().numpy())))
+            f1_str = '[min=%f, max=%f, avef=%f]' % (f1s.min(), f1s.max(), f1s.mean() )
+            prec_str = '[min=%f, max=%f, avep=%f]' % (precs.min(), precs.max(), precs.mean() )
+            recall_str = '[min=%f, max=%f, aver=%f]' % (recalls.min(), recalls.max(), recalls.mean() )
+            print("Epoch %d has loss %0.2f, p/r/f=%s/%s/%s total_acc=%f, with individual accuracies %s" % (epoch, epoch_loss, prec_str, recall_str, f1_str, total_acc, str(accuracies.data.cpu().numpy())))
+            torch.save(model, 'in-progress-model.pt')
 
 
 
