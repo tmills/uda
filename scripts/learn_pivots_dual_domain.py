@@ -119,6 +119,7 @@ def main(args):
         print("Direction is forward by default")
 
     # constants:
+    runs_to_average = 10
     goal_ind = 2
     domain_weight = 0.1
     confusion_weight = 0.1
@@ -191,106 +192,123 @@ def main(args):
     inds = np.arange(num_train_instances)
     best_qualifying_f1 = 0
 
-    for epoch in range(epochs):
-        epoch_loss = 0
-        random.shuffle(inds)
+    weight_vecs = np.zeros( (runs_to_average, num_feats))
 
-        epoch_start = time.time()
-        # Do a training epoch:
-        for source_ind in inds:
-            model.zero_grad()
+    for run in range(runs_to_average):
+        for epoch in range(epochs):
+            epoch_loss = 0
+            random.shuffle(inds)
 
-            # standardized_X = (X_train[source_ind,:].toarray() - X_mean) / X_std
-            source_batch = Variable(FloatTensor(X_task_train[source_ind,:].toarray()))# read input
-            source_task_labels = Variable(torch.unsqueeze(FloatTensor([y_task_train[source_ind],]), 1))# read task labels
-            source_domain_labels = Variable(torch.unsqueeze(FloatTensor([0.,]), 1)) # set to 0
+            epoch_start = time.time()
+            # Do a training epoch:
+            for source_ind in inds:
+                model.zero_grad()
 
-            if cuda:
-                source_batch = source_batch.cuda()
-                source_task_labels = source_task_labels.cuda()
-                source_domain_labels = source_domain_labels.cuda()
-            
-            # Get the task loss and domain loss for the source instance:
-            task_out, source_domain_out, source_confusion_out = model.forward(source_batch)
-            task_loss = task_loss_fn(task_out, source_task_labels)
-            domain_loss = domain_loss_fn(source_domain_out, source_domain_labels)
-            confusion_loss = confusion_loss_fn(source_confusion_out, source_domain_labels)
-            reg_term = l1_loss(model.feature.input_layer.vector, torch.zeros_like(model.feature.input_layer.vector))
+                # standardized_X = (X_train[source_ind,:].toarray() - X_mean) / X_std
+                source_batch = Variable(FloatTensor(X_task_train[source_ind,:].toarray()))# read input
+                source_task_labels = Variable(torch.unsqueeze(FloatTensor([y_task_train[source_ind],]), 1))# read task labels
+                source_domain_labels = Variable(torch.unsqueeze(FloatTensor([0.,]), 1)) # set to 0
 
-            # Randomly select a target instance:
-            target_ind = randint(num_target_instances)
-            target_batch = Variable(FloatTensor(X_target_train[target_ind,:].toarray())) # read input
-            target_domain_labels = Variable(torch.unsqueeze(FloatTensor([1.,]), 1)) # set to 1
+                if cuda:
+                    source_batch = source_batch.cuda()
+                    source_task_labels = source_task_labels.cuda()
+                    source_domain_labels = source_domain_labels.cuda()
+                
+                # Get the task loss and domain loss for the source instance:
+                task_out, source_domain_out, source_confusion_out = model.forward(source_batch)
+                task_loss = task_loss_fn(task_out, source_task_labels)
+                domain_loss = domain_loss_fn(source_domain_out, source_domain_labels)
+                confusion_loss = confusion_loss_fn(source_confusion_out, source_domain_labels)
+                reg_term = l1_loss(model.feature.input_layer.vector, torch.zeros_like(model.feature.input_layer.vector))
 
-            if cuda:
-                target_batch = target_batch.cuda()
-                target_domain_labels = target_domain_labels.cuda()
-            
-            # Get the domain loss for the target instances:
-            _, target_domain_out, target_confusion_out = model.forward(target_batch)
-            target_domain_loss = domain_loss_fn(target_domain_out, target_domain_labels)
-            target_confusion_loss = confusion_loss_fn(target_confusion_out, target_domain_labels)
+                # Randomly select a target instance:
+                target_ind = randint(num_target_instances)
+                target_batch = Variable(FloatTensor(X_target_train[target_ind,:].toarray())) # read input
+                target_domain_labels = Variable(torch.unsqueeze(FloatTensor([1.,]), 1)) # set to 1
 
-            # Get sum loss update weights:
-            # domain adaptation:
-            total_loss = (task_loss + 
-                            domain_weight * (domain_loss + target_domain_loss) + 
-                            confusion_weight * (confusion_loss + target_confusion_loss) +
-                            reg_weight * reg_term)
+                if cuda:
+                    target_batch = target_batch.cuda()
+                    target_domain_labels = target_domain_labels.cuda()
+                
+                # Get the domain loss for the target instances:
+                _, target_domain_out, target_confusion_out = model.forward(target_batch)
+                target_domain_loss = domain_loss_fn(target_domain_out, target_domain_labels)
+                target_confusion_loss = confusion_loss_fn(target_confusion_out, target_domain_labels)
 
-            total_loss.backward()
-            epoch_loss += total_loss
+                # Get sum loss update weights:
+                # domain adaptation:
+                total_loss = (task_loss + 
+                                domain_weight * (domain_loss + target_domain_loss) + 
+                                confusion_weight * (confusion_loss + target_confusion_loss) +
+                                reg_weight * reg_term)
 
-            optimizer.step()
+                total_loss.backward()
+                epoch_loss += total_loss
 
-        # At the end of every epoch, examine domain accuracy and how many non-zero parameters we have
-        source_eval_X = X_task_valid
-        source_eval_y = y_task_valid
-        source_task_out, source_domain_out, source_confusion_out = model.forward( Variable(FloatTensor(source_eval_X.toarray())).cuda() )
-        # If this goes down that means its getting more confused about the domain
-        domain_out_stdev = source_domain_out.std()
+                optimizer.step()
 
-        # source domain is 0, count up predictions where 1 - prediction = 1
-        source_domain_preds = np.round(source_domain_out.cpu().data.numpy())
-        source_predicted_count = np.sum(1 - source_domain_preds)
+            # At the end of every epoch, examine domain accuracy and how many non-zero parameters we have
+            source_eval_X = X_task_valid
+            source_eval_y = y_task_valid
+            source_task_out, source_domain_out, source_confusion_out = model.forward( Variable(FloatTensor(source_eval_X.toarray())).cuda() )
+            # If this goes down that means its getting more confused about the domain
+            domain_out_stdev = source_domain_out.std()
+
+            # source domain is 0, count up predictions where 1 - prediction = 1
+            source_domain_preds = np.round(source_domain_out.cpu().data.numpy())
+            source_predicted_count = np.sum(1 - source_domain_preds)
 
 
-        target_eval_X = X_target_valid
-        _, target_domain_out, target_confusion_out = model.forward( Variable(FloatTensor(target_eval_X.toarray())).cuda() )
-        # if using sigmoid output (0/1) with BCELoss
-        target_domain_preds = np.round(target_domain_out.cpu().data.numpy())
-        target_predicted_count = np.sum(target_domain_preds)
+            target_eval_X = X_target_valid
+            _, target_domain_out, target_confusion_out = model.forward( Variable(FloatTensor(target_eval_X.toarray())).cuda() )
+            # if using sigmoid output (0/1) with BCELoss
+            target_domain_preds = np.round(target_domain_out.cpu().data.numpy())
+            target_predicted_count = np.sum(target_domain_preds)
 
-        domain_acc = (source_predicted_count + target_predicted_count) / (source_eval_X.shape[0] + target_eval_X.shape[0])
+            domain_acc = (source_predicted_count + target_predicted_count) / (source_eval_X.shape[0] + target_eval_X.shape[0])
 
-        # predictions of 1 are the positive class: tps are where prediction and gold are 1
-        source_y_pred = np.round(source_task_out.cpu().data.numpy()[:,0])
-        tps = np.sum(source_y_pred * source_eval_y)
-        true_preds = source_y_pred.sum()
-        true_labels = source_eval_y.sum()
+            # predictions of 1 are the positive class: tps are where prediction and gold are 1
+            source_y_pred = np.round(source_task_out.cpu().data.numpy()[:,0])
+            tps = np.sum(source_y_pred * source_eval_y)
+            true_preds = source_y_pred.sum()
+            true_labels = source_eval_y.sum()
 
-        recall = tps / true_labels
-        prec = 1 if tps == 0 else tps / true_preds
-        f1 = 2 * recall * prec / (recall+prec)
+            recall = tps / true_labels
+            prec = 1 if tps == 0 else tps / true_preds
+            f1 = 2 * recall * prec / (recall+prec)
 
-        try:
-            weights = model.feature.input_layer.vector
-            num_zeros = (weights.data==0).sum() 
-            near_zeros = (torch.abs(weights.data)<0.000001).sum()
+            try:
+                weights = model.feature.input_layer.vector
+                num_zeros = (weights.data==0).sum() 
+                near_zeros = (torch.abs(weights.data)<0.000001).sum()
 
-            print("Min (abs) weight: %f" % (torch.abs(weights).min()))
-            print("Max (abs) weight: %f" % (torch.abs(weights).max()))
-            print("Ave weight: %f" % (torch.abs(weights).mean()))
-        except:
-            num_zeros = near_zeros = -1
+                print("Min (abs) weight: %f" % (torch.abs(weights).min()))
+                print("Max (abs) weight: %f" % (torch.abs(weights).max()))
+                print("Ave weight: %f" % (torch.abs(weights).mean()))
+            except:
+                num_zeros = near_zeros = -1
 
-        epoch_len = time.time() - epoch_start
-        print("[Source] Epoch %d [%0.1fs]: loss=%f\tnear_zero=%d\tnum_insts=%d\tdom_acc=%f\tdom_std=%f\tP=%f\tR=%f\tF=%f" % (epoch, epoch_len, epoch_loss, near_zeros, len(source_eval_y), domain_acc, domain_out_stdev, prec, recall, f1))
+            epoch_len = time.time() - epoch_start
+            print("[Source] Epoch %d [%0.1fs]: loss=%f\tnear_zero=%d\tnum_insts=%d\tdom_acc=%f\tdom_std=%f\tP=%f\tR=%f\tF=%f" % (epoch, epoch_len, epoch_loss, near_zeros, len(source_eval_y), domain_acc, domain_out_stdev, prec, recall, f1))
 
-        if f1 > 0.8 and f1 > best_qualifying_f1 and abs(domain_acc - 0.5) < 0.05:
-            print("This model is the most accurate-to-date that is confused between domains so we're writing it.")
-            best_qualifying_f1 = f1
-            torch.save(model, 'model_epoch%04d_dt=%s.pt' % (epoch, date_str))
+            if f1 > 0.8 and f1 > best_qualifying_f1 and abs(domain_acc - 0.5) < 0.05:
+                # This model meets our criteria so save its weights and short circuit
+                vec = np.abs(model.feature.input_layer.vector.data.cpu().numpy())
+                weight_vecs[run_num] = vec
+                next
+                
+                # If we haven't broken then reset epoch to 0;
+                # print("This model is the most accurate-to-date that is confused between domains so we're writing it.")
+                # best_qualifying_f1 = f1
+                # torch.save(model, 'model_epoch%04d_dt=%s.pt' % (epoch, date_str))
+
+    # All of our runs are done so take the average weights and grab the 200 best:
+    ave_weights = weight_vecs.mean(0)
+    inds = np.argsort(ave_weights)
+    pivot_inds = inds[0, -num_pivots:]
+    pivot_inds.sort()
+    for x in pivot_inds:
+        print(x)
 
 if __name__ == '__main__':
     main(sys.argv[1:])
