@@ -13,6 +13,7 @@ def main(args):
         sys.stderr.write("Error: Two required arguments:  <reduced training data> <0|1 (which domain is source/target)\n")
         sys.exit(-1)
 
+    num_pivots = 1000
     data_file = args[0]
     direction = int(args[1])
 
@@ -55,7 +56,7 @@ def main(args):
 
     ## I want high values, so I reverse the list and sort
     ranked_inds = np.argsort(1 - mi_joint)
-    pivots = np.sort(ranked_inds[:100])
+    pivots = np.sort(ranked_inds[:num_pivots])
 
     for pivot in pivots:
         print(pivot)

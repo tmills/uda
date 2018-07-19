@@ -88,7 +88,7 @@ stopword_patterns.txt: stopwords.txt
 	python scripts/eval_scl.py $^ True > $@
 
 #%.joint.eval: %
-%.scl.eval: %-forward.scl.eval %-backward.scl.eval #$$(dir %.pivots)training-data_reduced.liblinear0 %.pivots %_theta_svd.pkl
+%.scl.eval: %-forward.scl.eval %-backward.scl.eval
 	cat $^ > $@
 
 #%.eval: %.pivots $$(call source,%).liblinear0 $$(call target,%).liblinear0 pivot_data/%/theta_svd.pkl
