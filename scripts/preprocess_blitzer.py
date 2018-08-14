@@ -37,9 +37,9 @@ def parse_raw_domain(dir):
             rating = float(review.find('rating').text)
 
             if rating < 3:
-                label = 0
-            elif rating > 3:
                 label = 1
+            elif rating > 3:
+                label = 2
             else:
                 # 3 is ambiguous so they skip  those
                 continue
@@ -53,7 +53,8 @@ def parse_raw_domain(dir):
 
 def main(args):
     if len(args) < 3:
-        sys.stderr.write('Error: 3 required arguments: <domain 1> <domain 2> <output dir>')
+        sys.stderr.write('Error: 3 required arguments: <domain 1> <domain 2> <output dir>\n')
+        sys.exit(-1)
 
     dom1_df = get_domain_feature(args[0])
     dom2_df = get_domain_feature(args[1])
