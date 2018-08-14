@@ -56,7 +56,7 @@ def main(args):
                 new_map_file.write('%s : %d\n' % (feat_name, new_ind))
 
             # 2) Add its column to the data matrix:
-            new_X[:,new_ind] += X_train[:,ind]
+            new_X[:,new_ind] += X_train[:,ind].toarray()
 
             # 3) Add its index to the group mapping file:
             for feat_type in old_groups.keys():
