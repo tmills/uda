@@ -30,6 +30,12 @@ joindot = $(subst $(space),.,$(join $1,$2))
 
 ## mi pivot selection is assymetric -- can't use MI against label for target.
 ## so we need to allow for both directions.
+%/blitzermi-forward.pivots: %/training-data_reduced.liblinear0
+	python scripts/create_blitzermi_pivots.py $^ 0 > $@
+
+%/blitzermi-backward.pivots: %/training-data_reduced.liblinear0
+	python scripts/create_blitzermi_pivots.py $^ 1 > $@
+
 %/mi-forward.pivots: %/training-data_reduced.liblinear0
 	python scripts/create_mi_pivots.py $^ 0 > $@
 
