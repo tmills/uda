@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import sys
 from os.path import join,exists,dirname
+import random
 
 import numpy as np
 from numpy.random import randint
@@ -27,24 +28,23 @@ class ReverseLayerF(Function):
         # zero (ignores domain)
         # output = 0 * grad_output
         # reversed (default)
-        # output = grad_output.neg() * ctx.alpha
+        output = grad_output.neg() * ctx.alpha
         # print("Input grad is %s, output grad is %s" % (grad_output.data.cpu().numpy()[:10], output.data.cpu().numpy()[:10]))
-        # return output, None
-        return grad_output, None
+        return output, None
 
 # Instead of this, may be able to just regularize by forcing off-diagonal to zero
 # didn't work bc/ of memory issues
-# class StraightThroughLayer(nn.Module):
-#     def __init__(self, input_features):
-#         super(StraightThroughLayer, self).__init__()
+class StraightThroughLayer(nn.Module):
+    def __init__(self, input_features):
+        super(StraightThroughLayer, self).__init__()
 
-#         self.vector = nn.Parameter( torch.ones(1, input_features) )
-#         #self.add_module('pass-through vector', self.vector)
+        self.vector = nn.Parameter( torch.randn(1, input_features) )
+        #self.add_module('pass-through vector', self.vector)
 
-#     def forward(self,  input_data):
-#         # output = input_data * self.vector
-#         output = torch.mul(input_data, self.vector)
-#         return output
+    def forward(self,  input_data):
+        # output = input_data * self.vector
+        output = torch.mul(input_data, self.vector)
+        return output
         
 
 class PivotLearnerModel(nn.Module):
@@ -55,8 +55,13 @@ class PivotLearnerModel(nn.Module):
         # self.feature = nn.Sequential()
         # straight through layer just does an element-wise product with a weight vector
         num_features = input_features
-        self.vector = nn.Parameter( torch.randn(1, input_features) )
-        # self.feature.add_module('input_layer', StraightThroughLayer(input_features))
+        # num_features = 200
+        # self.vector = nn.Parameter( torch.randn(1, input_features) )
+        self.feature = nn.Sequential() 
+        self.feature.add_module('input_layer', StraightThroughLayer(input_features))
+        # self.feature.add_module('feature_layer', nn.Linear(input_features, num_features))
+        self.feature.add_module('relu', nn.ReLU(True))
+
         # Standard feed forward layer:
         # num_features = 200
         # self.feature.add_module('input_layer', nn.Linear(input_features, num_features))
@@ -69,7 +74,7 @@ class PivotLearnerModel(nn.Module):
         
         # domain classifier maps from a feature representation to a domain prediction
         self.domain_classifier = nn.Sequential()
-        hidden_nodes = 100
+        # hidden_nodes = 100
         # self.domain_classifier.add_module('domain_hidden', nn.Linear(num_features, hidden_nodes, bias=False))
         # self.domain_classifier.add_module('relu', nn.ReLU(True))
 
@@ -83,13 +88,13 @@ class PivotLearnerModel(nn.Module):
         # self.domain_classifier2.add_module('domain_sigmoid', nn.Sigmoid())
 
     def forward(self, input_data, alpha):
-        # feature = self.feature(input_data)
-        feature = input_data * self.vector
-        task_prediction = self.task_classifier(feature)
+        feature = self.feature(input_data)
+        # feature = input_data * self.vector
+        task_prediction = self.task_classifier(feature) * 2 - 1
 
         # Get domain prediction
         reverse_feature = ReverseLayerF.apply(feature, alpha)
-        domain_prediction = self.domain_classifier(reverse_feature)
+        domain_prediction = self.domain_classifier(reverse_feature) * 2 - 1
         # Only domain predictor 1 is reversed
         # domain_prediction2 = self.domain_classifier2(feature)
 
@@ -101,6 +106,7 @@ def main(args):
         sys.stderr.write("Required arguments: <data file> [backward True|False]\n")
         sys.exit(-1)
     
+    cuda = False
     if torch.cuda.is_available():
         cuda = True
     
@@ -113,13 +119,18 @@ def main(args):
 
     # Read the data:
     goal_ind = 2
-    domain_weight = 0.1
+    domain_weight = 1.0
+    lr = 0.01
+    epochs = 100
 
     sys.stderr.write("Reading source data from %s\n" % (args[0]))
     all_X, all_y = load_svmlight_file(args[0])
     
-    # y is 1,2 by default, map to -1,1 for sigmoid training
+    # y is 1,2 by default, map to 0,1 for sigmoid training
     all_y -= 1   # 0/1
+    # continue to -1/1 for softmargin training:
+    all_y *= 2  # 0/2
+    all_y -= 1  # -1/1
 
     num_instances, num_feats = all_X.shape
 
@@ -128,34 +139,43 @@ def main(args):
 
     feature_map = read_feature_lookup(join(dirname(args[0]), 'reduced-features-lookup.txt'))
 
-    lr = 0.01
-    epochs = 100
 
     direction = 1 if backward else 0
     sys.stderr.write("using domain %s as source, %s as target\n"  %
         (feature_map[domain_inds[direction]],feature_map[domain_inds[1-direction]]))
 
-    train_instance_inds = np.where(all_X[:,domain_inds[direction]].toarray() > 0)[0]
-    X_train = all_X[train_instance_inds,:]
-    X_train[:, domain_inds[direction]] = 0
-    X_train[:, domain_inds[1-direction]] = 0
+    source_instance_inds = np.where(all_X[:,domain_inds[direction]].toarray() > 0)[0]
+    X_source = all_X[source_instance_inds,:]
+    X_source[:, domain_inds[direction]] = 0
+    X_source[:, domain_inds[1-direction]] = 0
 
-    y_train = all_y[train_instance_inds]
-    num_train_instances = X_train.shape[0]
+    y_source = all_y[source_instance_inds]
 
-    test_instance_inds = np.where(all_X[:,domain_inds[1-direction]].toarray() > 0)[0]
-    X_test = all_X[test_instance_inds,:]
-    X_test[:, domain_inds[direction]] = 0
-    X_test[:, domain_inds[1-direction]] = 0
-    # y_test = all_y[test_instance_inds]
-    num_test_instances = X_test.shape[0]
+    num_source_instances = X_source.shape[0]
+    num_train_instances = int(X_source.shape[0] * 0.8)
+    X_task_train = X_source[:num_train_instances,:]
+    y_task_train = y_source[:num_train_instances]
+    X_task_valid = X_source[num_train_instances:, :]
+    y_task_valid = y_source[num_train_instances:]
+
+    target_instance_inds = np.where(all_X[:,domain_inds[1-direction]].toarray() > 0)[0]
+    X_target = all_X[target_instance_inds,:]
+    X_target[:, domain_inds[direction]] = 0
+    X_target[:, domain_inds[1-direction]] = 0
+    num_target_train = int(X_target.shape[0] * 0.8)
+    X_target_train = X_target[:num_target_train,:]
+    # y_target_train = y_target[:num_target_train]
+    X_target_valid = X_target[num_target_train:, :]
+    # y_target_dev = y_target[num_target_train:]
+
+    # y_test = all_y[target_instance_inds]
+    num_target_instances = X_target_train.shape[0]
     
     model = PivotLearnerModel(num_feats)
-    task_loss_fn = nn.BCELoss()
-    domain_loss_fn = nn.BCELoss()
+    task_loss_fn = nn.SoftMarginLoss() #nn.BCEWithLogitsLoss()
+    domain_loss_fn = nn.SoftMarginLoss() #nn.BCEWithLogitsLoss()
     l1_loss = nn.L1Loss()
     
-
     if cuda:
         model.cuda()
         task_loss_fn.cuda()
@@ -164,11 +184,28 @@ def main(args):
     optimizer = optim.SGD(model.parameters(), lr=lr)
     model.train()
 
+    # weights = model.vector
+    try:
+        weights = model.feature.input_layer.vector
+        print("Before training:")
+        print("Min (abs) weight: %f" % (torch.abs(weights).min()))
+        print("Max (abs) weight: %f" % (torch.abs(weights).max()))
+        print("Ave weight: %f" % (torch.abs(weights).mean()))
+        num_zeros = (weights.data==0).sum() 
+        near_zeros = (torch.abs(weights.data)<0.000001).sum()
+        print("Zeros=%d, near-zeros=%d" % (num_zeros, near_zeros))
+    except:
+        pass
+
+    # Main training loop
+    inds = np.arange(num_train_instances)
+
     for epoch in range(epochs):
         epoch_loss = 0
-        selected_source_inds = []
+        random.shuffle(inds)
+
         # Do a training epoch:
-        for ind in range(num_train_instances):
+        for ind in inds:
             model.zero_grad()
 
             ## Gradually increase (?) the importance of the regularization term
@@ -176,12 +213,11 @@ def main(args):
             alpha = 2. / (1. + np.exp(-10 * p)) - 1
 
             ## Randomly select a training instance:
-            source_ind = randint(num_train_instances)
-            selected_source_inds.append(source_ind)
-            # standardized_X = (X_train[source_ind,:].toarray() - X_mean) / X_std
-            source_batch = Variable(FloatTensor(X_train[source_ind,:].toarray()))# read input
-            source_task_labels = Variable(torch.unsqueeze(FloatTensor([y_train[source_ind],]), 1))# read task labels
-            source_domain_labels = Variable(torch.unsqueeze(FloatTensor([0.,]), 1)) # set to 0
+            # source_ind = randint(num_train_instances)
+            # selected_source_inds.append(source_ind)
+            source_batch = Variable(FloatTensor(X_task_train[ind,:].toarray()))# read input
+            source_task_labels = Variable(torch.unsqueeze(FloatTensor([y_task_train[ind],]), 1))# read task labels
+            source_domain_labels = Variable(torch.unsqueeze(FloatTensor([-1.,]), 1)) # set to 0
 
             if cuda:
                 source_batch = source_batch.cuda()
@@ -193,11 +229,15 @@ def main(args):
             task_loss = task_loss_fn(task_out, source_task_labels)
             domain_loss = domain_loss_fn(task_domain_out, source_domain_labels)
             # domain2_loss = domain_loss_fn(task_domain_out[1], source_domain_labels)
-            # reg_term = l1_loss(model.feature.input_layer.vector, torch.zeros_like(model.feature.input_layer.vector))
+            try:
+                weights = model.feature.input_layer.vector
+                reg_term = l1_loss(weights, torch.zeros_like(weights))
+            except:
+                reg_term = 0
 
             # Randomly select a target instance:
-            target_ind = randint(num_test_instances)
-            target_batch = Variable(FloatTensor(X_test[target_ind,:].toarray())) # read input
+            target_ind = randint(num_target_instances)
+            target_batch = Variable(FloatTensor(X_target_train[target_ind,:].toarray())) # read input
             target_domain_labels = Variable(torch.unsqueeze(FloatTensor([1.,]), 1)) # set to 1
 
             if cuda:
@@ -211,7 +251,7 @@ def main(args):
 
             # Get sum loss update weights:
             # domain adaptation:
-            total_loss = task_loss + domain_weight * (domain_loss + target_domain_loss)
+            # total_loss = task_loss + domain_weight * (domain_loss + target_domain_loss)
             # Task only:
             # total_loss = task_loss
             # Domain only:
@@ -219,7 +259,7 @@ def main(args):
             # Debugging with 2 domain classifiers:
             # total_loss = domain_loss + domain2_loss + target_domain_loss + target_domain2_loss
             # With regularization and DA term:
-            # total_loss = task_loss + domain_weight * (domain_loss + target_domain_loss) + reg_term
+            total_loss = task_loss + domain_weight * domain_loss + domain_weight * target_domain_loss + reg_term
             # With regularization only:
             # total_loss = task_loss + reg_term
 
@@ -232,23 +272,47 @@ def main(args):
 
             optimizer.step()
 
-        print("Min weight: %f" % (model.vector.min()))
-        print("Max weight: %f" % (model.vector.max()))
-        print("Ave weight: %f" % (torch.abs(model.vector.sum())))
 
         # At the end of every epoch, examine domain accuracy and how many non-zero parameters we have
-        unique_source_inds = np.unique(selected_source_inds)
-        all_source_inds = np.arange(num_train_instances)
-        eval_source_inds = np.setdiff1d(all_source_inds, unique_source_inds)
-        source_eval_X = X_train[eval_source_inds]
-        source_eval_y = y_train[eval_source_inds]
+        # unique_source_inds = np.unique(selected_source_inds)
+        # all_source_inds = np.arange(num_train_instances)
+        # eval_source_inds = np.setdiff1d(all_source_inds, unique_source_inds)
+        # source_eval_X = X_train[eval_source_inds]
+        # source_eval_y = y_train[eval_source_inds]
+        source_eval_X = X_task_valid
+        source_eval_y = y_task_valid
         source_task_out, source_domain_out = model.forward( Variable(FloatTensor(source_eval_X.toarray())).cuda(), alpha=0.)
+        # If using BCEWithLogitsLoss which would automatically do a sigmoid post-process
+        # source_task_out = nn.functional.sigmoid(source_task_out)
+        # source_domain_out = nn.functional.sigmoid(source_domain_out)
+
         # source domain is 0, count up predictions where 1 - prediction = 1
-        source_domain_preds = np.round(source_domain_out[0].cpu().data.numpy())
+        # If using sigmoid outputs (0/1) with BCELoss
+        # source_domain_preds = np.round(source_domain_out.cpu().data.numpy())
+        # if using Softmargin() loss (-1/1) with -1 as source domain
+        source_domain_preds = np.round(((source_domain_out.cpu().data.numpy() * -1) + 1) / 2)
         source_predicted_count = np.sum(1 - source_domain_preds)
         source_domain_acc = source_predicted_count / len(source_eval_y)
 
-        source_y_pred = np.round(source_task_out.cpu().data.numpy()[:,0])
+        target_eval_X = X_target_valid
+        _, target_domain_out = model.forward( Variable(FloatTensor(target_eval_X.toarray())).cuda(), alpha=0.)
+        # If ussing with BCEWithLogitsLoss (see above)
+        # target_domain_out = nn.functional.sigmoid(target_domain_out)
+        # if using sigmoid output (0/1) with BCELoss
+        # target_domain_preds = np.round(target_domain_out.cpu().data.numpy())
+        # if using Softmargin loss (-1/1) with 1 as target domain:
+        target_domain_preds = np.round(((source_domain_out.cpu().data.numpy()) + 1) / 2)
+        target_predicted_count = np.sum(target_domain_preds)
+
+        domain_acc = (source_predicted_count + target_predicted_count) / (source_eval_X.shape[0] + target_eval_X.shape[0])
+
+        # if using 0/1 predictions:
+        # source_y_pred = np.round(source_task_out.cpu().data.numpy()[:,0])
+        # if using -1/1 predictions? (-1 = not negated, 1 = negated)
+        source_y_pred = np.round((source_task_out.cpu().data.numpy()[:,0] + 1) / 2)
+        source_eval_y += 1
+        source_eval_y /= 2
+
         # predictions of 1 are the positive class: tps are where prediction and gold are 1
         tps = np.sum(source_y_pred * source_eval_y)
         true_preds = source_y_pred.sum()
@@ -258,10 +322,24 @@ def main(args):
         prec = 1 if tps == 0 else tps / true_preds
         f1 = 2 * recall * prec / (recall+prec)
 
-        # weights = model.feature[0].vector
-        num_nonzero = 0 #(weights.data!=0).sum() 
+        try:
+            weights = model.feature.input_layer.vector
+            num_zeros = (weights.data==0).sum() 
+            near_zeros = (torch.abs(weights.data)<0.000001).sum()
 
-        print("[Source] Epoch %d: loss=%f\tnnz=%d\tnum_insts=%d\tdom_acc=%f\tP=%f\tR=%f\tF=%f" % (epoch, epoch_loss, num_nonzero, len(source_eval_y), source_domain_acc, prec, recall, f1))
+            print("Min (abs) weight: %f" % (torch.abs(weights).min()))
+            print("Max (abs) weight: %f" % (torch.abs(weights).max()))
+            print("Ave weight: %f" % (torch.abs(weights).mean()))
+        except:
+            num_zeros = near_zeros = -1
+
+        print("[Source] Epoch %d: loss=%f\tzeros=%d\tnear_zeros=%d\tnum_insts=%d\tdom_acc=%f\tP=%f\tR=%f\tF=%f" % (epoch, epoch_loss, num_zeros, near_zeros, len(source_eval_y), domain_acc, prec, recall, f1))
+
+    weights = model.feature.input_layer.vector
+    ranked_inds = torch.sort(torch.abs(weights))[1]
+    pivots = ranked_inds[0,-200:]
+    pivots.sort()
+    print(pivots.cpu().data.numpy().tolist())
 
 if __name__ == '__main__':
     main(sys.argv[1:])

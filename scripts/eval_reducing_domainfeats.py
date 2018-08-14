@@ -83,12 +83,18 @@ def main(args):
         removable_feat_ind = ordered_feats[ind]
         all_X[:,removable_feat_ind] = 0
         ind -= 1
+        if np.isnan(chi2_scores[removable_feat_ind]):
+            print("Skipping eval of feature index %d which was NaN" % (removable_feat_ind))
+            continue
+        
         print("Removing feature index %d which had chi2 score of %s" % (removable_feat_ind, str(chi2_scores[removable_feat_ind])))
+
         _, domain_acc = find_best_c(all_X, y_domain, scorer=scorer)
+        print("F score for domain separation is %f" % (domain_acc))
 
         task_c, _ = find_best_c(X_train, y_train, pos_label=goal_ind)
-        evaluate_and_print_scores(X_train, y_train, X_test, y_test, score_label=goal_ind, C=task_c)
-        print("F score for domain separation is %f" % (domain_acc))
+        if ind % 10 == 0:
+            evaluate_and_print_scores(X_train, y_train, X_test, y_test, score_label=goal_ind, C=task_c)
 
 if __name__ == "__main__":
     main(sys.argv[1:])

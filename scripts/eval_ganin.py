@@ -22,7 +22,7 @@ class ReverseLayerF(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        output = grad_output * 0 #grad_output.neg() * ctx.alpha
+        output = grad_output.neg() * ctx.alpha
         return output, None
 
 class TwoOutputModel(nn.Module):
@@ -82,7 +82,7 @@ def main(args):
 
     # Read the data:
     goal_ind = 2
-    domain_weight = 0.1
+    domain_weight = 0.5
 
     sys.stderr.write("Reading source data from %s\n" % (args[0]))
     all_X, all_y = load_svmlight_file(args[0])
@@ -108,25 +108,32 @@ def main(args):
     sys.stderr.write("using domain %s as source, %s as target\n"  %
         (feature_map[domain_inds[direction]],feature_map[domain_inds[1-direction]]))
 
-    train_instance_inds = np.where(all_X[:,domain_inds[direction]].toarray() > 0)[0]
-    X_train = all_X[train_instance_inds,:]
-    X_train[:, domain_inds[direction]] = 0
-    X_train[:, domain_inds[1-direction]] = 0
-    # X_mean = X_train.mean(0)
-    # X_std = np.std(X_train.toarray(),0)
-    # zeros = np.where(X_std == 0)[0]
-    # X_std[zeros] = 1   ## If we divide by 1 later nothing changes.
+    source_instance_inds = np.where(all_X[:,domain_inds[direction]].toarray() > 0)[0]
+    X_source = all_X[source_instance_inds,:]
+    X_source[:, domain_inds[direction]] = 0
+    X_source[:, domain_inds[1-direction]] = 0
+    y_source = all_y[source_instance_inds]
 
-    y_train = all_y[train_instance_inds]
-    num_train_instances = X_train.shape[0]
-
-    test_instance_inds = np.where(all_X[:,domain_inds[1-direction]].toarray() > 0)[0]
-    X_test = all_X[test_instance_inds,:]
-    X_test[:, domain_inds[direction]] = 0
-    X_test[:, domain_inds[1-direction]] = 0
-    y_test = all_y[test_instance_inds]
-    num_test_instances = X_test.shape[0]
+    num_source_instances = X_source.shape[0]
+    num_train_instances = int(X_source.shape[0] * 0.8)
+    X_task_train = X_source[:num_train_instances,:]
+    y_task_train = y_source[:num_train_instances]
+    X_task_valid = X_source[num_train_instances:, :]
+    y_task_valid = y_source[num_train_instances:]
     
+    target_instance_inds = np.where(all_X[:,domain_inds[1-direction]].toarray() > 0)[0]
+    X_target = all_X[target_instance_inds,:]
+    X_target[:, domain_inds[direction]] = 0
+    X_target[:, domain_inds[1-direction]] = 0
+    num_target_train = int(X_target.shape[0] * 0.8)
+    X_target_train = X_target[:num_target_train,:]
+    # y_target_train = y_target[:num_target_train]
+    X_target_valid = X_target[num_target_train:, :]
+    # y_target_dev = y_target[num_target_train:]
+
+    # y_test = all_y[target_instance_inds]
+    num_target_instances = X_target_train.shape[0]
+      
     model = TwoOutputModel(num_feats, num_hidden_nodes, 2)
     task_loss_fn = nn.BCELoss()
     domain_loss_fn = nn.BCELoss()
@@ -156,8 +163,8 @@ def main(args):
             source_ind = randint(num_train_instances)
             selected_source_inds.append(source_ind)
             # standardized_X = (X_train[source_ind,:].toarray() - X_mean) / X_std
-            source_batch = Variable(FloatTensor(X_train[source_ind,:].toarray()))# read input
-            source_task_labels = Variable(FloatTensor([y_train[source_ind],]))# read task labels
+            source_batch = Variable(FloatTensor(X_task_train[source_ind,:].toarray()))# read input
+            source_task_labels = Variable(FloatTensor([y_task_train[source_ind],]))# read task labels
             source_domain_labels = Variable(FloatTensor([0.,])) # set to 0
 
             if cuda:
@@ -166,14 +173,14 @@ def main(args):
                 source_domain_labels = source_domain_labels.cuda()
             
             # Get the task loss and domain loss for the source instance:
-            task_out, domain_out = model.forward(source_batch, alpha)
+            task_out, source_domain_out = model.forward(source_batch, alpha)
             task_loss = task_loss_fn(task_out, source_task_labels)
-            domain_loss = domain_loss_fn(domain_out, source_domain_labels)
+            domain_loss = domain_loss_fn(source_domain_out, source_domain_labels)
 
             # Randomly select a target instance:
-            target_ind = randint(num_test_instances)
+            target_ind = randint(num_target_instances)
             # # standardized_X = (X_test[target_ind,:].toarray() - X_mean) / X_std
-            target_batch = Variable(FloatTensor(X_test[target_ind,:].toarray())) # read input
+            target_batch = Variable(FloatTensor(X_target_train[target_ind,:].toarray())) # read input
             target_domain_labels = Variable(FloatTensor([1.,])) # set to 1
 
             if cuda:
@@ -181,27 +188,34 @@ def main(args):
                 target_domain_labels = target_domain_labels.cuda()
             
             # Get the domain loss for the target instances:
-            _, domain_out = model.forward(target_batch, alpha)
-            target_domain_loss = domain_loss_fn(domain_out, target_domain_labels)
+            _, target_domain_out = model.forward(target_batch, alpha)
+            target_domain_loss = domain_loss_fn(target_domain_out, target_domain_labels)
 
             # Get sum loss update weights:
             # domain adaptation:
-            total_loss = task_loss + domain_weight* (domain_loss + target_domain_loss)
+            total_loss = task_loss + domain_weight * (domain_loss + target_domain_loss)
             # Task only:
             # total_loss = task_loss
             epoch_loss += total_loss
             total_loss.backward()
             optimizer.step()
         
-        unique_source_inds = np.unique(selected_source_inds)
-        all_source_inds = np.arange(num_train_instances)
-        eval_source_inds = np.setdiff1d(all_source_inds, unique_source_inds)
-        source_eval_X = X_train[eval_source_inds]
-        source_eval_y = y_train[eval_source_inds]
+        source_eval_X = X_task_valid
+        source_eval_y = y_task_valid
         source_task_out, source_domain_out = model.forward( Variable(FloatTensor(source_eval_X.toarray())).cuda(), alpha=0.)
         # source domain is 0, count up predictions where 1 - prediction = 1
-        source_domain_preds = np.sum(1 - source_domain_out.cpu().data.numpy())
-        source_domain_acc = source_domain_preds / len(source_eval_y)
+        # source_domain_preds = np.sum(1 - source_domain_out.cpu().data.numpy())
+        # source_domain_acc = source_domain_preds / len(source_eval_y)
+        source_domain_preds = np.round(source_domain_out.cpu().data.numpy())
+        source_predicted_count = np.sum(1 - source_domain_preds)
+        # source_domain_acc = source_predicted_count / len(source_eval_y)
+
+        target_eval_X = X_target_valid
+        _, target_domain_out = model.forward( Variable(FloatTensor(target_eval_X.toarray())).cuda(), alpha=0.)
+        target_domain_preds = np.round(target_domain_out.cpu().data.numpy())
+        target_predicted_count = np.sum(target_domain_preds)
+        
+        domain_acc = (source_predicted_count + target_predicted_count) / (source_eval_X.shape[0] + target_eval_X.shape[0])
 
         source_y_pred = np.round(source_task_out.cpu().data.numpy()[:,0])
         # predictions of 1 are the positive class: tps are where prediction and gold are 1
@@ -212,7 +226,7 @@ def main(args):
         recall = tps / true_labels
         prec = 1 if tps == 0 else tps / true_preds
         f1 = 2 * recall * prec / (recall+prec)
-        print("[Source] Epoch %d: loss=%f\tnum_insts=%d\tdom_acc=%f\tP=%f\tR=%f\tF=%f" % (epoch, epoch_loss, len(source_eval_y), source_domain_acc, prec, recall, f1))
+        print("[Source] Epoch %d: loss=%f\tnum_insts=%d\tdom_acc=%f\tP=%f\tR=%f\tF=%f" % (epoch, epoch_loss, len(source_eval_y), domain_acc, prec, recall, f1))
         
 
         # No eval:

@@ -13,7 +13,7 @@ def main(args):
         sys.stderr.write("Error: Two required arguments:  <reduced training data> <0|1 (which domain is source/target)\n")
         sys.exit(-1)
 
-    num_pivots = 1000
+    num_pivots = 100
     data_file = args[0]
     direction = int(args[1])
 
@@ -35,24 +35,15 @@ def main(args):
     source_inds = np.where(all_X[:,source_ind].toarray() != 0)[0]
     target_inds = np.where(all_X[:,target_ind].toarray() != 0)[0]
 
-    mi_label = mi(all_X[source_inds,:], all_y[source_inds])
+    source_X = all_X[source_inds,:]
+    target_X = all_X[target_inds,:]
 
-    y_corpus = np.zeros(num_instances)
-    y_corpus[source_inds] = 1
-    #X_combined = scipy.sparse.lil_matrix((len(y_corpus), num_feats))
-    #X_combined[:num_instances] += X_train
-    #X_combined[num_instances:] += X_test
+    freq_mask = np.asarray( ((source_X.sum(0) > 10) & (target_X.sum(0) > 10)).astype('int') )[0]
 
-    all_X_minus_domain_feats = all_X.copy()
-    all_X_minus_domain_feats[:,source_ind] = 0
-    all_X_minus_domain_feats[:,target_ind] = 0
-    mi_domains = mi(all_X_minus_domain_feats, y_corpus)
+    mi_label = mi(source_X, all_y[source_inds])
 
     ## mi is between 0 (no information) and 1 (perfect information)
-    ## we want the label informatio to be high (~1)
-    ## we want the domain information to be low (1-mi ~ 1)
-    ## we want both these things to be true so we use *
-    mi_joint = mi_label * (1 - mi_domains)
+    mi_joint = mi_label * freq_mask
 
     ## I want high values, so I reverse the list and sort
     ranked_inds = np.argsort(1 - mi_joint)

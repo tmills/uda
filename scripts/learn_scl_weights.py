@@ -8,7 +8,7 @@ from scipy.linalg import svd
 import numpy as np
 import pickle
 import sys
-from uda_common import read_pivots
+from uda_common import read_pivots, find_best_c
 
 
 def main(args):
@@ -37,6 +37,7 @@ def main(args):
         ## Since the script that created these idd not have domain index 
         ## variables we don't need to worry about them here
         X_train, y_train = load_svmlight_file(f)
+        prevalence = y_train.sum()
         ## Weight matrix is supposed to be n x p, n non-pivot features by p pivot features
         ## Here we just zeroed out all the pivot features in the pre-process, so we
         ## will actually have m x p but with <=n non-zero features.
@@ -45,6 +46,8 @@ def main(args):
             weight_matrix = np.zeros((num_feats, len(files)), dtype=np.float16)
         # clf = SGDClassifier(loss="modified_huber", penalty='none', fit_intercept=False, random_state=718)
         clf = LinearSVC(fit_intercept=False)
+        best_c, best_score = find_best_c(X_train, y_train, C_list=[0.1,1], pos_label=1)
+        sys.stderr.write(' Best F score for predicting this feature is %f with prevalence %f\n' % (best_score, prevalence))
         clf.fit(X_train, y_train)
         coefs_out = open(join(data_dir, basename(f).replace('liblinear','model') ), 'wb')
         pickle.dump(clf, coefs_out)
