@@ -17,6 +17,7 @@ def main(args):
         sys.exit(-1)
 
     data_dir = args[0]
+    base_dir = dirname(data_dir)
     short_dir = basename(data_dir)
     ## data dir is pivot_name_pivots_done so we need to chop off the end:
     pivot_name = short_dir[:-11]
@@ -29,6 +30,10 @@ def main(args):
         files.append(line[13:])
     f.close()
     
+    ## Read the base data file so we get an absolute count of features:
+    all_X, _ = load_svmlight_file(join(base_dir, 'training-data_reduced.liblinear0'))
+    num_feats = all_X.shape[1]
+
     #files = [join(data_dir,f) for f in listdir(data_dir) if f.endswith("liblinear")]
     weight_matrix = None
 
@@ -36,13 +41,13 @@ def main(args):
         sys.stderr.write("Loading file %s for classification\n" % (f))
         ## Since the script that created these idd not have domain index 
         ## variables we don't need to worry about them here
-        X_train, y_train = load_svmlight_file(f)
+        X_train, y_train = load_svmlight_file(f, n_features=num_feats)
         prevalence = y_train.sum()
         ## Weight matrix is supposed to be n x p, n non-pivot features by p pivot features
         ## Here we just zeroed out all the pivot features in the pre-process, so we
         ## will actually have m x p but with <=n non-zero features.
         if weight_matrix is None:
-            num_feats = X_train.shape[1]
+            # num_feats = X_train.shape[1]
             weight_matrix = np.zeros((num_feats, len(files)), dtype=np.float16)
         # clf = SGDClassifier(loss="modified_huber", penalty='none', fit_intercept=False, random_state=718)
         clf = LinearSVC(fit_intercept=False)
