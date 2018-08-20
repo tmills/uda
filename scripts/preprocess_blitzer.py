@@ -62,7 +62,7 @@ def main(args):
     dom2_text, dom2_labels = parse_raw_domain(args[1])
     all_y = np.concatenate((dom1_labels, dom2_labels))
 
-    count_vect = CountVectorizer(ngram_range=(1,2))
+    count_vect = CountVectorizer(ngram_range=(1,2),binary=True)
     count_vect.fit(dom1_text + dom2_text)
 
     dom1_train_counts = count_vect.transform(dom1_text)
