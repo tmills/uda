@@ -40,10 +40,11 @@ def main(args):
     sys.stderr.write("Creating pivot matrices for each feature group\n")
     #ind_groups = [None] * num_feats
     for group_key,group_inds in group_map.items():
-        group_inds = np.array(group_inds) - 1
+        group_inds = np.array(group_inds)
         group_X = scipy.sparse.lil_matrix(np.zeros((num_instances, num_feats)))
         group_X += all_X
         group_X[:, group_inds] = 0
+        group_X[:, pivots] = 0
         for group_ind in group_inds:
             if group_ind in pivots:
                 out_file = join(out_dir, 'pivot_%s-training.liblinear' % group_ind)
