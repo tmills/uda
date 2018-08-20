@@ -3,7 +3,7 @@ from os.path import join,exists,dirname
 import numpy as np
 import pickle
 from sklearn.datasets import load_svmlight_file, dump_svmlight_file
-from sklearn.metrics import f1_score, precision_recall_fscore_support
+from sklearn.metrics import f1_score, precision_recall_fscore_support, accuracy_score
 from uda_common import zero_pivot_columns, zero_nonpivot_columns, read_pivots, evaluate_and_print_scores, align_test_X_train, get_f1, find_best_c, read_feature_groups, read_feature_lookup
 import os
 import scipy.sparse
@@ -12,10 +12,19 @@ from sklearn import svm
 
 def main(args):
     if len(args) < 1:
-        sys.stderr.write("Required argument(s): <combined & reduced labeled data>\n\n")
+        sys.stderr.write("Required argument(s): <combined & reduced labeled data> [f1|acc]\n\n")
         sys.exit(-1)
 
     goal_ind = 2
+
+    scorer = f1_score
+    if len(args) > 1:
+        if args[1] == 'f1':
+            scorer = f1_score
+        elif args[1] == 'acc':
+            scorer = accuracy_score
+        else:
+            raise Exception("Unknown scorer supplied: %s" % (args[1]))
 
     sys.stderr.write("Reading source data from %s\n" % (args[0]))
     all_X, all_y = load_svmlight_file(args[0])
@@ -51,7 +60,10 @@ def main(args):
         sys.stderr.write("Target prevalence is: %f\n" % target_prevalence)
         
 
-        (l2_c, l2_f1) = find_best_c(X_train, y_train, scorer=f1_score, pos_label=goal_ind)
+        args = {'scorer':scorer}
+        if scorer == f1_score:
+            args['pos_label'] = goal_ind
+        (l2_c, l2_score) = find_best_c(X_train, y_train, **args)
         # p,r,f,_ = cross_val_score(svm.LinearSVC(C=C, penalty=penalty, dual=dual), X_train, y_train, scoring=scorer, n_jobs=1))
         print("Tuning on source selected c value %f" % (l2_c))
 
@@ -63,9 +75,11 @@ def main(args):
 
         # f1 = f1_score(y_test, y_predicted, pos_label=goal_ind)
         p,r,f1,_ = precision_recall_fscore_support(y_test, y_predicted, average='binary', pos_label=goal_ind)
+        acc = accuracy_score(y_test, y_predicted)
         print("Precision,recall,F-score on target data is %f\t%f\t%f" % (p,r,f1))
+        print("Accuracy score on target data is %f" % (acc))
 
-        best_c = best_f = best_r = best_p = predicted_prevalence = 0
+        best_c = best_score = best_r = best_p = predicted_prevalence = 0
         for c_exp in range(-10, 0):
             c = 2. ** c_exp
             #print("Testing with c=%f" % (c))
@@ -73,15 +87,21 @@ def main(args):
             clf.fit(X_train, y_train)
             y_predicted = clf.predict(X_test)
             # f1 = f1_score(y_test, y_predicted, pos_label=goal_ind)
-            p,r,f1,_ = precision_recall_fscore_support(y_test, y_predicted, average='binary', pos_label=goal_ind)
-            if f1 > best_f:
-                best_f = f1
+            if scorer == f1_score:
+                p,r,f1,_ = precision_recall_fscore_support(y_test, y_predicted, average='binary', pos_label=goal_ind)
+                score = f1
+            elif scorer == accuracy_score:
+                acc = accuracy_score(y_test, y_predicted)
+                score = acc
+
+            if score > best_score:
+                best_score = score
                 best_r = r
                 best_p = p
                 best_c = c
                 predicted_prevalence = len(np.where(y_predicted == goal_ind)[0]) / float(len(y_test))
 
-        print("P/R/F if we tune c=%f to optimize test set F score is %f\t%f\t%f with prevalence %f"%  (best_c, best_p, best_r, best_f, predicted_prevalence))
+        print("P/R/Score if we tune c=%f to optimize specified test set metric is %f\t%f\t%f with prevalence %f"%  (best_c, best_p, best_r, best_score, predicted_prevalence))
 
 
 
