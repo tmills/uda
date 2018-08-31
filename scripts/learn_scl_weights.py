@@ -5,6 +5,7 @@ from os.path import isfile, join, basename, dirname
 # from sklearn.linear_model import SGDClassifier
 from sklearn.svm import LinearSVC
 from scipy.linalg import svd
+from scipy.sparse import lil_matrix
 import numpy as np
 import pickle
 import sys
@@ -60,9 +61,12 @@ def main(args):
 
         weight_matrix[:,ind] = clf.coef_
 
+    neg_inds = np.where(weight_matrix < 0)
+    weight_matrix[neg_inds] = 0
+    sparse_weight_matrix = lil_matrix(weight_matrix)
     sys.stderr.write('Writing full theta matrix\n')
     full_out = open(args[1], 'wb')
-    pickle.dump(weight_matrix, full_out)
+    pickle.dump(sparse_weight_matrix, full_out)
     full_out.close()
 
 if __name__ == '__main__':

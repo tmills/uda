@@ -18,7 +18,7 @@ joindot = $(subst $(space),.,$(join $1,$2))
 
 ## Gt50 pivot selection method is symmetrical -- doesn't change based on which
 ## domain is source and which is target
-.PRECIOUS: %/gt50feats.pivots %/random.pivots %/mi-forward.pivots %/mi-backward.pivots
+.PRECIOUS: %/gt50feats.pivots %/random.pivots %/mi-forward.pivots %/mi-backward.pivots %/blitzermi-forward.pivots %/blitzermi-backward.pivots
 %/gt50feats.pivots: %/training-data_reduced.liblinear0
 	python scripts/create_freq_pivots.py $^ > $@
 
