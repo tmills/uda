@@ -22,6 +22,7 @@ def main(args):
 
     sys.stderr.write("Reading in data files\n")
     all_X, all_y = load_svmlight_file(args[1])
+    all_X = all_X.tolil()
     ## Zero out domain-indicator variables (not needed for this step)
     all_X[:,domain_inds[0]] = 0
     all_X[:,domain_inds[1]] = 0
