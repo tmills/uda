@@ -30,21 +30,27 @@ def read_preprocessed_feature_file(fn, word_map={}):
     coo = coo_matrix( (data, (row_inds, col_inds)) )
     return coo, word_map
 
+def get_data_matrix(fn, word_map = {}):
+
+    pos_insts, word_map = read_preprocessed_feature_file(join(fn, 'positive.review'), word_map)
+    neg_insts, word_map = read_preprocessed_feature_file(join(fn, 'negative.review'), word_map)
+    # add zeros to extend pos_insts for features i didn't see before
+    num_new_feats = neg_insts.shape[1] - pos_insts.shape[1]
+    pos_insts_extended = hstack([pos_insts, np.zeros((pos_insts.shape[0], num_new_feats))])
+    all_train = vstack([pos_insts_extended, neg_insts])
+
+    return all_train, word_map
 
 def main(args):
     if len(args) < 1:
         sys.stderr.write('Error: One required arguments: <domain dir>\n')
         sys.exit(-1)
+    
+    all_train,_ = get_data_matrix(args[0])
 
-    pos_insts, word_map = read_preprocessed_feature_file(join(args[0], 'positive.review'))
-    neg_insts, _ = read_preprocessed_feature_file(join(args[0], 'negative.review'), word_map)
-    # add zeros to extend pos_insts for features i didn't see before
-    num_new_feats = neg_insts.shape[1] - pos_insts.shape[1]
-    pos_insts_extended = hstack([pos_insts, np.zeros((pos_insts.shape[0], num_new_feats))])
-    all_train = vstack([pos_insts_extended, neg_insts])
-    all_y = np.zeros( pos_insts.shape[0]+neg_insts.shape[0])
-    all_y[:pos_insts.shape[0]] = 1
-    all_y[pos_insts.shape[0]:] = 2
+    all_y = np.zeros( 2000 )
+    all_y[:1000] = 1
+    all_y[1000:] = 2
 
     scores = cross_validate(SGDClassifier(loss='modified_huber', tol=None, max_iter=50, alpha=0.1),
                     all_train,
