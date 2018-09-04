@@ -63,10 +63,10 @@ def main(args):
 
     neg_inds = np.where(weight_matrix < 0)
     weight_matrix[neg_inds] = 0
-    sparse_weight_matrix = lil_matrix(weight_matrix)
+    #sparse_weight_matrix = lil_matrix(weight_matrix)
     sys.stderr.write('Writing full theta matrix\n')
     full_out = open(args[1], 'wb')
-    pickle.dump(sparse_weight_matrix, full_out)
+    pickle.dump(weight_matrix, full_out)
     full_out.close()
 
 if __name__ == '__main__':

@@ -82,11 +82,11 @@ def main(args):
 
     with open(matrix_file, 'rb') as theta_file:
         theta = pickle.load(theta_file)
-        num_new_feats = theta.shape[1]
+        num_new_feats = theta.shape[0]
 
 
-    new_X_train = nopivot_X_train * theta
-    new_X_test = nopivot_X_test * theta
+    new_X_train = (theta * nopivot_X_train.transpose()).transpose()
+    new_X_test = (theta * nopivot_X_test.transpose()).transpose()
 
     print("All + new feature space evaluation")
     all_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_new_feats), dtype=np.float16))

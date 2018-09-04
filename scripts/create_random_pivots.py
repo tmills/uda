@@ -15,8 +15,10 @@ def main(args):
     ## load the data:
     all_X, all_y = load_svmlight_file(data_file)
     num_instances, num_feats = all_X.shape
-
-    pivots = np.random.choice(num_feats, 100, replace=False)
+    
+    eligible_inds = np.where(all_X.sum(0) > 10)[1]
+    num_eligible_feats = len(eligible_inds)
+    pivots = eligible_inds[np.random.choice(num_eligible_feats, 100, replace=False)]
     pivots.sort()
 
     for pivot in pivots:
