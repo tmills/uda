@@ -10,6 +10,8 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import cross_validate
 from scipy.sparse import lil_matrix, hstack, vstack
 from sklearn.datasets import dump_svmlight_file
+import re
+num_patt = re.compile('\d+')
 
 def get_domain_feature(dir):
     domain_feature = basename(dir)
@@ -44,8 +46,10 @@ def parse_raw_domain(dir):
                 # 3 is ambiguous so they skip  those
                 continue
             labels.append(label)
-            text = review.find('review_text')
-            texts.append(text.text.strip())
+            text = review.find('review_text').text.strip()
+            text = re.sub(num_patt, 'numbertoken', text)
+
+            texts.append(text)
             # texts.append(text.text.strip() + ' %s' % (domain_feature))
     
     return texts, labels      
@@ -62,7 +66,7 @@ def main(args):
     dom2_text, dom2_labels = parse_raw_domain(args[1])
     all_y = np.concatenate((dom1_labels, dom2_labels))
 
-    count_vect = CountVectorizer(ngram_range=(1,2),binary=False)
+    count_vect = CountVectorizer(ngram_range=(1,2),binary=False,stop_words='english')
     count_vect.fit(dom1_text + dom2_text)
 
     dom1_train_counts = count_vect.transform(dom1_text)
