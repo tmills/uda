@@ -30,10 +30,10 @@ def parse_raw_domain(dir):
         # dataset is not properly formatted xml
         fn = join(dir, '%s.review' % polarity)
         f = open(fn, 'r')
-        text = ('<doc>\n' + f.read() + '</doc>').replace('&', '&amp;').replace('\x1a', ' ')
-        lines = text.split('\n')
-        tree = ET.fromstring(text)
-        # root = tree.getroot()
+        document = ('<doc>\n' + f.read() + '</doc>').replace('&', '&amp;').replace('\x1a', ' ')
+        lines = document.split('\n')
+        tree = ET.fromstring(document)
+
         for review in tree.findall('review'):
             # Extract the rating and give it a polarity label (0=negative, 1=positive)
             rating = float(review.find('rating').text)
@@ -46,10 +46,13 @@ def parse_raw_domain(dir):
                 # 3 is ambiguous so they skip  those
                 continue
             labels.append(label)
+            title = review.find('title').text.strip()
+            title = re.sub(num_patt, 'numbertoken', title)
+
             text = review.find('review_text').text.strip()
             text = re.sub(num_patt, 'numbertoken', text)
 
-            texts.append(text)
+            texts.append(title + ' ' + text)
             # texts.append(text.text.strip() + ' %s' % (domain_feature))
     
     return texts, labels      
