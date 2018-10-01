@@ -13,9 +13,11 @@ def main(args):
         sys.stderr.write("Error: Two required arguments:  <reduced training data> <0|1 (which domain is source/target)\n")
         sys.exit(-1)
 
+    # Blitzer doesn't say how many pivots to use; ziser tries 100-500
     num_pivots = 100
     data_file = args[0]
     direction = int(args[1])
+    doc_freq = 5  # blitzer uses 5, ziser uses 10?
 
     data_dir = dirname(data_file)
     groups_file = join(data_dir, 'reduced-feature-groups.txt')
@@ -38,7 +40,13 @@ def main(args):
     source_X = all_X[source_inds,:]
     target_X = all_X[target_inds,:]
 
-    freq_mask = np.asarray( ((source_X.sum(0) > 10) & (target_X.sum(0) > 10)).astype('int') )[0]
+    ## map all features to 1 so that sum gives us a document frequency
+    source_docfreq_X = scipy.sparse.lil_matrix((source_X > 0).astype(int))
+    target_docfreq_X = scipy.sparse.lil_matrix((target_X > 0).astype(int))
+    
+    docfreq_X = scipy.sparse.lil_matrix((all_X > 0).astype(int))
+
+    freq_mask = np.asarray( ((source_docfreq_X.sum(0) > doc_freq) & (target_docfreq_X.sum(0) > doc_freq)).astype('int') )[0]
 
     mi_label = mi(source_X, all_y[source_inds])
 
