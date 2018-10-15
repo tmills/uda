@@ -43,7 +43,7 @@ def main(args):
     for group_key,group_inds in group_map.items():
         group_inds = np.array(group_inds)
         group_X = scipy.sparse.lil_matrix(np.zeros((num_instances, num_feats)))
-        group_X += (all_X > 0).astype('int')
+        group_X += all_X
         group_X[:, group_inds] = 0
         group_X[:, pivots] = 0
         for group_ind in group_inds:
