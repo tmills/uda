@@ -2,7 +2,7 @@
 from sklearn.datasets import load_svmlight_file
 from os import listdir
 from os.path import isfile, join, basename, dirname
-# from sklearn.linear_model import SGDClassifier
+from sklearn.linear_model import SGDClassifier
 from sklearn.svm import LinearSVC
 from scipy.linalg import svd
 from scipy.sparse import lil_matrix
@@ -50,8 +50,8 @@ def main(args):
         if weight_matrix is None:
             # num_feats = X_train.shape[1]
             weight_matrix = np.zeros((num_feats, len(files)), dtype=np.float16)
-        # clf = SGDClassifier(loss="modified_huber", penalty='none', fit_intercept=False, random_state=718)
-        clf = LinearSVC(fit_intercept=False)
+        clf = SGDClassifier(loss="modified_huber", fit_intercept=False, random_state=718, max_iter=50, alpha=0.1)
+        # clf = LinearSVC(fit_intercept=False)
         best_c, best_score = find_best_c(X_train, y_train, C_list=[0.1,1], pos_label=1)
         sys.stderr.write(' Best F score for predicting this feature is %f with prevalence %f\n' % (best_score, prevalence))
         clf.fit(X_train, y_train)
@@ -63,7 +63,6 @@ def main(args):
 
     neg_inds = np.where(weight_matrix < 0)
     weight_matrix[neg_inds] = 0
-    #sparse_weight_matrix = lil_matrix(weight_matrix)
     sys.stderr.write('Writing full theta matrix\n')
     full_out = open(args[1], 'wb')
     pickle.dump(weight_matrix, full_out)
