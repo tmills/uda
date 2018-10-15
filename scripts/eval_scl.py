@@ -86,7 +86,14 @@ def main(args):
 
 
     new_X_train = (theta * nopivot_X_train.transpose()).transpose()
+    bin_feat_l1 = np.linalg.norm(X_train, ord=1, axis=0)[0:].mean()
+    svd_feat_l1 = np.linalg.norm(new_X_train, ord=1, axis=0).mean()
+    l1_ratio = svd_feat_l1 / bin_feat_l1
+    desired_ratio = 5.0
+    scale_factor = l1_ratio / desired_ratio
+    new_X_train /= scale_factor
     new_X_test = (theta * nopivot_X_test.transpose()).transpose()
+    new_X_test /= scale_factor
 
     print("All + new feature space evaluation")
     all_plus_new_train = np.matrix(np.zeros((X_train.shape[0], num_feats + num_new_feats), dtype=np.float16))
@@ -97,7 +104,11 @@ def main(args):
     all_plus_new_test[:, num_feats:] += new_X_test
     (l2_c, l2_f1) = find_best_c(all_plus_new_train, y_train, pos_label=goal_ind)
     evaluate_and_print_scores(all_plus_new_train, y_train, all_plus_new_test, y_test, goal_ind, l2_c)
+    
     del all_plus_new_train, all_plus_new_test
+
+    print("Pivot + new feature space evaluation")
+
 
 
 if __name__ == '__main__':
