@@ -25,8 +25,9 @@ def main(args):
     sys.stderr.write('Projecting theta into lower dimension\n')
     ## Compute svd to get low-dimensional projection
     [U, s, Vh] = svds(weight_matrix, k=proj_dim)
-    ## U is n x n. Take subset of rows to get d x n, then transpose to get n x d
-    theta = U[:, 0:proj_dim].transpose()
+    ## U is n x n. Take the top proj_dim left singular values then transpose them into rows to make projection
+    ## matrix to apply to new data
+    theta = U.transpose()
     ## theta is now an n x d projection from the non-pivot feature space into
     ## the d-dimensional correspondence space.
     theta_out = open(args[1], 'wb')
