@@ -4,7 +4,7 @@ from os.path import join
 import sys
 
 import numpy as np
-from sklearn.linear_model import SGDClassifier
+from sklearn.linear_model import SGDClassifier,LogisticRegression
 from sklearn.model_selection import cross_validate
 from scipy.sparse import coo_matrix, hstack, vstack
 
@@ -12,7 +12,7 @@ from validate_processed_blitzer import read_preprocessed_feature_file, get_data_
 
 def main(args):
     if len(args) < 1:
-        sys.stderr.write('Error: Two required arguments: <domain dir>\n')
+        sys.stderr.write('Error: Two required arguments: <processed data dir>\n')
         sys.exit(-1)
 
     doms = ['books', 'dvd', 'electronics', 'kitchen']
@@ -42,7 +42,12 @@ def main(args):
             dom2_data = dom2_data.tolil()[:, :dom1_data.shape[1]]
             score = clf.score(dom2_data, dom2_y)
 
-            print("Accuracy score is %f" % (score))
+            lr = LogisticRegression(C=0.1)
+            lr.fit(dom1_data, dom1_y)
+            lr_score = lr.score(dom2_data, dom2_y)
+            lr_preds = lr.predict(dom2_data)
+
+            print("SVM Accuracy score is %f, LR accuracy score is %f" % (score, lr_score))
                 
 if __name__ == '__main__':
     args = sys.argv[1:]
