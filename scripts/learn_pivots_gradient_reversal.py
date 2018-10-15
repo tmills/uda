@@ -4,7 +4,7 @@ from os.path import join,exists,dirname
 import random
 
 import numpy as np
-from numpy.random import randint
+from numpy.random import randint, choice
 from sklearn.datasets import load_svmlight_file
 from torch.autograd import Function, Variable
 import torch.nn as nn
@@ -90,11 +90,11 @@ class PivotLearnerModel(nn.Module):
     def forward(self, input_data, alpha):
         feature = self.feature(input_data)
         # feature = input_data * self.vector
-        task_prediction = self.task_classifier(feature) * 2 - 1
+        task_prediction = self.task_classifier(feature)
 
         # Get domain prediction
         reverse_feature = ReverseLayerF.apply(feature, alpha)
-        domain_prediction = self.domain_classifier(reverse_feature) * 2 - 1
+        domain_prediction = self.domain_classifier(reverse_feature)
         # Only domain predictor 1 is reversed
         # domain_prediction2 = self.domain_classifier2(feature)
 
@@ -120,8 +120,10 @@ def main(args):
     # Read the data:
     goal_ind = 2
     domain_weight = 1.0
+    reg_weight = 0.1
     lr = 0.01
-    epochs = 100
+    epochs = 1000
+    batch_size = 50
 
     sys.stderr.write("Reading source data from %s\n" % (args[0]))
     all_X, all_y = load_svmlight_file(args[0])
@@ -129,8 +131,8 @@ def main(args):
     # y is 1,2 by default, map to 0,1 for sigmoid training
     all_y -= 1   # 0/1
     # continue to -1/1 for softmargin training:
-    all_y *= 2  # 0/2
-    all_y -= 1  # -1/1
+    # all_y *= 2  # 0/2
+    # all_y -= 1  # -1/1
 
     num_instances, num_feats = all_X.shape
 
@@ -172,17 +174,18 @@ def main(args):
     num_target_instances = X_target_train.shape[0]
     
     model = PivotLearnerModel(num_feats)
-    task_loss_fn = nn.SoftMarginLoss() #nn.BCEWithLogitsLoss()
-    domain_loss_fn = nn.SoftMarginLoss() #nn.BCEWithLogitsLoss()
+    task_loss_fn = nn.BCELoss()
+    domain_loss_fn = nn.BCELoss()
     l1_loss = nn.L1Loss()
     
     if cuda:
         model.cuda()
         task_loss_fn.cuda()
         domain_loss_fn.cuda()
+        l1_loss.cuda()
 
-    optimizer = optim.SGD(model.parameters(), lr=lr)
-    model.train()
+    optimizer = optim.Adam(model.parameters())
+    # optimizer = optim.SGD(model.parameters(), lr=lr)
 
     # weights = model.vector
     try:
@@ -202,22 +205,27 @@ def main(args):
 
     for epoch in range(epochs):
         epoch_loss = 0
-        random.shuffle(inds)
+        model.train()
 
         # Do a training epoch:
-        for ind in inds:
+        for batch in range( 1+ ( num_train_instances // batch_size ) ):
             model.zero_grad()
 
+            start_ind = batch * batch_size
+            if start_ind >= num_train_instances:
+                #This happens if our number of instances is perfectly divisible by batch size (when batch_size=1 this is often).
+                break
+            end_ind = num_train_instances if start_ind + batch_size >= num_train_instances else start_ind+batch_size
+            this_batch_size = end_ind - start_ind
+
             ## Gradually increase (?) the importance of the regularization term
-            p = float(ind + epoch * num_train_instances*2) / (epochs * num_train_instances*2)
+            ave_ind = start_ind + this_batch_size // 2
+            p = float(ave_ind + epoch * num_train_instances*2) / (epochs * num_train_instances*2)
             alpha = 2. / (1. + np.exp(-10 * p)) - 1
 
-            ## Randomly select a training instance:
-            # source_ind = randint(num_train_instances)
-            # selected_source_inds.append(source_ind)
-            source_batch = Variable(FloatTensor(X_task_train[ind,:].toarray()))# read input
-            source_task_labels = Variable(torch.unsqueeze(FloatTensor([y_task_train[ind],]), 1))# read task labels
-            source_domain_labels = Variable(torch.unsqueeze(FloatTensor([-1.,]), 1)) # set to 0
+            source_batch = Variable(FloatTensor(X_task_train[start_ind:end_ind,:].toarray()))# read input
+            source_task_labels = Variable(torch.unsqueeze(FloatTensor([y_task_train[start_ind:end_ind],]), 1))# read task labels
+            source_domain_labels = Variable(torch.zeros(this_batch_size,1)) # set to 0
 
             if cuda:
                 source_batch = source_batch.cuda()
@@ -235,10 +243,10 @@ def main(args):
             except:
                 reg_term = 0
 
-            # Randomly select a target instance:
-            target_ind = randint(num_target_instances)
-            target_batch = Variable(FloatTensor(X_target_train[target_ind,:].toarray())) # read input
-            target_domain_labels = Variable(torch.unsqueeze(FloatTensor([1.,]), 1)) # set to 1
+            # Randomly select a matching number of target instances:
+            target_inds = choice(num_target_instances, this_batch_size, replace=False)
+            target_batch = Variable(FloatTensor(X_target_train[target_inds,:].toarray())) # read input
+            target_domain_labels = Variable(torch.ones(this_batch_size, 1))
 
             if cuda:
                 target_batch = target_batch.cuda()
@@ -259,7 +267,9 @@ def main(args):
             # Debugging with 2 domain classifiers:
             # total_loss = domain_loss + domain2_loss + target_domain_loss + target_domain2_loss
             # With regularization and DA term:
-            total_loss = task_loss + domain_weight * domain_loss + domain_weight * target_domain_loss + reg_term
+            total_loss = (task_loss + 
+                            domain_weight * (domain_loss + target_domain_loss) + 
+                            reg_weight * reg_term)
             # With regularization only:
             # total_loss = task_loss + reg_term
 
@@ -288,9 +298,9 @@ def main(args):
 
         # source domain is 0, count up predictions where 1 - prediction = 1
         # If using sigmoid outputs (0/1) with BCELoss
-        # source_domain_preds = np.round(source_domain_out.cpu().data.numpy())
+        source_domain_preds = np.round(source_domain_out.cpu().data.numpy())
         # if using Softmargin() loss (-1/1) with -1 as source domain
-        source_domain_preds = np.round(((source_domain_out.cpu().data.numpy() * -1) + 1) / 2)
+        # source_domain_preds = np.round(((source_domain_out.cpu().data.numpy() * -1) + 1) / 2)
         source_predicted_count = np.sum(1 - source_domain_preds)
         source_domain_acc = source_predicted_count / len(source_eval_y)
 
@@ -299,19 +309,19 @@ def main(args):
         # If ussing with BCEWithLogitsLoss (see above)
         # target_domain_out = nn.functional.sigmoid(target_domain_out)
         # if using sigmoid output (0/1) with BCELoss
-        # target_domain_preds = np.round(target_domain_out.cpu().data.numpy())
+        target_domain_preds = np.round(target_domain_out.cpu().data.numpy())
         # if using Softmargin loss (-1/1) with 1 as target domain:
-        target_domain_preds = np.round(((source_domain_out.cpu().data.numpy()) + 1) / 2)
+        # target_domain_preds = np.round(((source_domain_out.cpu().data.numpy()) + 1) / 2)
         target_predicted_count = np.sum(target_domain_preds)
 
         domain_acc = (source_predicted_count + target_predicted_count) / (source_eval_X.shape[0] + target_eval_X.shape[0])
 
         # if using 0/1 predictions:
-        # source_y_pred = np.round(source_task_out.cpu().data.numpy()[:,0])
+        source_y_pred = np.round(source_task_out.cpu().data.numpy()[:,0])
         # if using -1/1 predictions? (-1 = not negated, 1 = negated)
-        source_y_pred = np.round((source_task_out.cpu().data.numpy()[:,0] + 1) / 2)
-        source_eval_y += 1
-        source_eval_y /= 2
+        # source_y_pred = np.round((source_task_out.cpu().data.numpy()[:,0] + 1) / 2)
+        # source_eval_y += 1
+        # source_eval_y /= 2
 
         # predictions of 1 are the positive class: tps are where prediction and gold are 1
         tps = np.sum(source_y_pred * source_eval_y)
@@ -338,8 +348,9 @@ def main(args):
     weights = model.feature.input_layer.vector
     ranked_inds = torch.sort(torch.abs(weights))[1]
     pivots = ranked_inds[0,-200:]
-    pivots.sort()
-    print(pivots.cpu().data.numpy().tolist())
+    pivot_list = pivots.cpu().data.numpy().tolist()
+    pivot_list.sort()
+    print(pivot_list)
 
 if __name__ == '__main__':
     main(sys.argv[1:])
