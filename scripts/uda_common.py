@@ -108,7 +108,7 @@ def read_feature_lookup(lookup_file, offset=0):
     ## in "helpfully" adjusts all the indices. So when we read them in we
     ## decrement them all.
     map = {}
-    with open(lookup_file, 'r') as f:
+    with open(lookup_file, 'r', encoding='utf-8') as f:
         for line in f:
             name, ind = line.rstrip().split(' : ')
             map[int(ind)+offset] = name
