@@ -106,9 +106,9 @@ def main(args):
         sys.stderr.write("Required arguments: <data file> [backward True|False]\n")
         sys.exit(-1)
     
-    cuda = False
+    device = 'cpu'
     if torch.cuda.is_available():
-        cuda = True
+        device = 'cuda'
     
     if len(args) > 1:
         backward = bool(args[1])
@@ -173,16 +173,14 @@ def main(args):
     # y_test = all_y[target_instance_inds]
     num_target_instances = X_target_train.shape[0]
     
-    model = PivotLearnerModel(num_feats)
+    model = PivotLearnerModel(num_feats).to(device)
     task_loss_fn = nn.BCELoss()
     domain_loss_fn = nn.BCELoss()
     l1_loss = nn.L1Loss()
     
-    if cuda:
-        model.cuda()
-        task_loss_fn.cuda()
-        domain_loss_fn.cuda()
-        l1_loss.cuda()
+    #task_loss_fn.cuda()
+    #    domain_loss_fn.cuda()
+    #    l1_loss.cuda()
 
     optimizer = optim.Adam(model.parameters())
     # optimizer = optim.SGD(model.parameters(), lr=lr)
@@ -223,15 +221,10 @@ def main(args):
             p = float(ave_ind + epoch * num_train_instances*2) / (epochs * num_train_instances*2)
             alpha = 2. / (1. + np.exp(-10 * p)) - 1
 
-            source_batch = Variable(FloatTensor(X_task_train[start_ind:end_ind,:].toarray()))# read input
-            source_task_labels = Variable(torch.unsqueeze(FloatTensor([y_task_train[start_ind:end_ind],]), 1))# read task labels
-            source_domain_labels = Variable(torch.zeros(this_batch_size,1)) # set to 0
-
-            if cuda:
-                source_batch = source_batch.cuda()
-                source_task_labels = source_task_labels.cuda()
-                source_domain_labels = source_domain_labels.cuda()
-            
+            source_batch = FloatTensor(X_task_train[start_ind:end_ind,:].toarray()).to(device) # read input
+            source_task_labels = torch.unsqueeze(FloatTensor([y_task_train[start_ind:end_ind],]).to(device), 1)# read task labels
+            source_domain_labels = torch.zeros(this_batch_size,1, device=device) # set to 0
+           
             # Get the task loss and domain loss for the source instance:
             task_out, task_domain_out = model.forward(source_batch, alpha)
             task_loss = task_loss_fn(task_out, source_task_labels)
@@ -239,19 +232,16 @@ def main(args):
             # domain2_loss = domain_loss_fn(task_domain_out[1], source_domain_labels)
             try:
                 weights = model.feature.input_layer.vector
-                reg_term = l1_loss(weights, torch.zeros_like(weights))
+                reg_term = l1_loss(weights, torch.zeros_like(weights, device=device))
             except:
                 reg_term = 0
 
             # Randomly select a matching number of target instances:
             target_inds = choice(num_target_instances, this_batch_size, replace=False)
-            target_batch = Variable(FloatTensor(X_target_train[target_inds,:].toarray())) # read input
-            target_domain_labels = Variable(torch.ones(this_batch_size, 1))
+            target_batch = FloatTensor(X_target_train[target_inds,:].toarray()).to(device) # read input
+            target_domain_labels = torch.ones(this_batch_size, 1, device=device)
 
-            if cuda:
-                target_batch = target_batch.cuda()
-                target_domain_labels = target_domain_labels.cuda()
-            
+           
             # Get the domain loss for the target instances:
             _, target_domain_out = model.forward(target_batch, alpha)
             target_domain_loss = domain_loss_fn(target_domain_out, target_domain_labels)
@@ -291,7 +281,7 @@ def main(args):
         # source_eval_y = y_train[eval_source_inds]
         source_eval_X = X_task_valid
         source_eval_y = y_task_valid
-        source_task_out, source_domain_out = model.forward( Variable(FloatTensor(source_eval_X.toarray())).cuda(), alpha=0.)
+        source_task_out, source_domain_out = model.forward( FloatTensor(source_eval_X.toarray()).to(device), alpha=0.)
         # If using BCEWithLogitsLoss which would automatically do a sigmoid post-process
         # source_task_out = nn.functional.sigmoid(source_task_out)
         # source_domain_out = nn.functional.sigmoid(source_domain_out)
@@ -305,7 +295,7 @@ def main(args):
         source_domain_acc = source_predicted_count / len(source_eval_y)
 
         target_eval_X = X_target_valid
-        _, target_domain_out = model.forward( Variable(FloatTensor(target_eval_X.toarray())).cuda(), alpha=0.)
+        _, target_domain_out = model.forward( FloatTensor(target_eval_X.toarray()).to(device), alpha=0.)
         # If ussing with BCEWithLogitsLoss (see above)
         # target_domain_out = nn.functional.sigmoid(target_domain_out)
         # if using sigmoid output (0/1) with BCELoss
@@ -347,10 +337,12 @@ def main(args):
 
     weights = model.feature.input_layer.vector
     ranked_inds = torch.sort(torch.abs(weights))[1]
-    pivots = ranked_inds[0,-200:]
+    pivots = ranked_inds[0,-1000:]
     pivot_list = pivots.cpu().data.numpy().tolist()
-    pivot_list.sort()
-    print(pivot_list)
+#    pivot_list.sort()
+    for pivot in pivot_list:
+        print('%d : %s' % (pivot, feature_map[pivot]))
+
 
 if __name__ == '__main__':
     main(sys.argv[1:])
