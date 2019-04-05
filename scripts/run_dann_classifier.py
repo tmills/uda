@@ -26,6 +26,7 @@ import sys
 
 import numpy as np
 import torch
+from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
                               TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
@@ -39,6 +40,7 @@ from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 from pytorch_pretrained_bert.modeling import BertForSequenceClassification, BertConfig, WEIGHTS_NAME, CONFIG_NAME
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
+from bert_dann import BertForDomainAdversarialSequenceClassification
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -49,7 +51,7 @@ logger = logging.getLogger(__name__)
 class InputExample(object):
     """A single training/test example for simple sequence classification."""
 
-    def __init__(self, guid, text_a, text_b=None, label=None):
+    def __init__(self, guid, text_a, text_b=None, label=None, domain=0):
         """Constructs a InputExample.
 
         Args:
@@ -65,16 +67,18 @@ class InputExample(object):
         self.text_a = text_a
         self.text_b = text_b
         self.label = label
+        self.domain = domain
 
 
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids, input_mask, segment_ids, label_id):
+    def __init__(self, input_ids, input_mask, segment_ids, label_id, domain):
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.segment_ids = segment_ids
         self.label_id = label_id
+        self.domain = domain
 
 
 class DataProcessor(object):
@@ -86,6 +90,10 @@ class DataProcessor(object):
 
     def get_dev_examples(self, data_dir):
         """Gets a collection of `InputExample`s for the dev set."""
+        raise NotImplementedError()
+
+    def get_ood_examples(self, data_dir):
+        """Gets a collection of `InputExample`s from an out-of-domain set."""
         raise NotImplementedError()
 
     def get_labels(self):
@@ -194,6 +202,10 @@ class ColaProcessor(DataProcessor):
         return self._create_examples(
             self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
 
+    def get_ood_examples(self, data_dir):
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, 'ood.tsv')), 'ood')
+        
     def get_labels(self):
         """See base class."""
         return ["0", "1"]
@@ -205,8 +217,9 @@ class ColaProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, i)
             text_a = line[3]
             label = line[1]
+            domain = 1 if set_type == 'ood' else 0
             examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+                InputExample(guid=guid, text_a=text_a, text_b=None, label=label, domain=domain))
         return examples
 
 
@@ -518,11 +531,14 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
                     "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
             logger.info("label: %s (id = %d)" % (example.label, label_id))
 
+        domain = example.domain
+
         features.append(
                 InputFeatures(input_ids=input_ids,
                               input_mask=input_mask,
                               segment_ids=segment_ids,
-                              label_id=label_id))
+                              label_id=label_id,
+                              domain=domain))
     return features
 
 
@@ -681,6 +697,9 @@ def main():
                         help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
                              "0 (default value): dynamic loss scaling.\n"
                              "Positive power of 2: static loss scaling value.\n")
+    parser.add_argument('--domain_loss_weight',
+                        type=float, default=0.1,
+                        help="Weight to give to the domain prediction loss relative to task loss (task loss=1.0)")
     parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
     args = parser.parse_args()
@@ -716,6 +735,15 @@ def main():
         "qnli": "classification",
         "rte": "classification",
         "wnli": "classification",
+        "polarity": "classification",
+    }
+
+    num_labels_task = {
+        "cola": 2,
+        "sst-2": 2,
+        "mnli": 3,
+        "mrpc": 2,
+        "polarity": 2,
     }
 
     if args.local_rank == -1 or args.no_cuda:
@@ -764,9 +792,13 @@ def main():
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
     train_examples = None
+    ood_examples = None
     num_train_optimization_steps = None
     if args.do_train:
         train_examples = processor.get_train_examples(args.data_dir)
+        ood_examples = processor.get_ood_examples(args.data_dir)
+        dev_examples = processor.get_dev_examples(args.data_dir)
+        train_examples.extend(ood_examples)
         num_train_optimization_steps = int(
             len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
         if args.local_rank != -1:
@@ -774,7 +806,7 @@ def main():
 
     # Prepare model
     cache_dir = args.cache_dir if args.cache_dir else os.path.join(str(PYTORCH_PRETRAINED_BERT_CACHE), 'distributed_{}'.format(args.local_rank))
-    model = BertForSequenceClassification.from_pretrained(args.bert_model,
+    model = BertForDomainAdversarialSequenceClassification.from_pretrained(args.bert_model,
               cache_dir=cache_dir,
               num_labels=num_labels)
     if args.fp16:
@@ -819,6 +851,8 @@ def main():
                              warmup=args.warmup_proportion,
                              t_total=num_train_optimization_steps)
 
+    loss_fn = CrossEntropyLoss()
+    domain_loss_fn = BCEWithLogitsLoss() 
     global_step = 0
     nb_tr_steps = 0
     tr_loss = 0
@@ -878,33 +912,88 @@ def main():
                 nb_tr_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     if args.fp16:
-                        # modify learning rate with special warm up BERT uses
-                        # if args.fp16 is False, BertAdam is used that handles this automatically
-                        lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_optimization_steps, args.warmup_proportion)
-                        for param_group in optimizer.param_groups:
-                            param_group['lr'] = lr_this_step
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    global_step += 1
+                        optimizer.backward(loss)
+                    else:
+                        loss.backward()
 
-        # Save a trained model and the associated configuration
-        model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
-        output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)
-        torch.save(model_to_save.state_dict(), output_model_file)
-        output_config_file = os.path.join(args.output_dir, CONFIG_NAME)
-        with open(output_config_file, 'w') as f:
-            f.write(model_to_save.config.to_json_string())
+                    tr_loss += task_loss.item()
+                    dom_loss_total += domain_loss.item()
+                    epoch_task_loss += task_loss.item()
+                    epoch_dom_loss += domain_loss.item()
+                    nb_tr_examples += input_ids.size(0)
+                    nb_tr_steps += 1
+                    if (step + 1) % args.gradient_accumulation_steps == 0:
+                        if args.fp16:
+                            # modify learning rate with special warm up BERT uses
+                            # if args.fp16 is False, BertAdam is used that handles this automatically
+                            lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_optimization_steps, args.warmup_proportion)
+                            for param_group in optimizer.param_groups:
+                                param_group['lr'] = lr_this_step
+                        optimizer.step()
+                        optimizer.zero_grad()
+                        global_step += 1
+       
+                # Eval model on dev set and print out progress so we know when to stop training 
+                model.eval() 
 
-        # Load a trained model and config that you have fine-tuned
-        config = BertConfig(output_config_file)
-        model = BertForSequenceClassification(config, num_labels=num_labels)
-        model.load_state_dict(torch.load(output_model_file))
-    else:
-        model = BertForSequenceClassification.from_pretrained(args.bert_model, num_labels=num_labels)
-    model.to(device)
+                dev_features = convert_examples_to_features(
+                    dev_examples, label_list, args.max_seq_length, tokenizer)
+                logger.info("***** Running dev evaluation for epoch %d *****" % (epoch))
+                all_input_ids = torch.tensor([f.input_ids for f in dev_features], dtype=torch.long)
+                all_input_mask = torch.tensor([f.input_mask for f in dev_features], dtype=torch.long)
+                all_segment_ids = torch.tensor([f.segment_ids for f in dev_features], dtype=torch.long)
+                all_label_ids = torch.tensor([f.label_id for f in dev_features], dtype=torch.long)
+                dev_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+                # Run prediction for full data
+                dev_sampler = SequentialSampler(dev_data)
+                dev_dataloader = DataLoader(dev_data, sampler=dev_sampler, batch_size=args.eval_batch_size)
+
+                model.eval()
+                dev_loss, dev_accuracy = 0, 0
+                nb_eval_steps, nb_dev_examples = 0, 0
+
+                for input_ids, input_mask, segment_ids, label_ids in tqdm(dev_dataloader, desc="Evaluating"):
+                    input_ids = input_ids.to(device)
+                    input_mask = input_mask.to(device)
+                    segment_ids = segment_ids.to(device)
+                    label_ids = label_ids.to(device)
+
+                    with torch.no_grad():
+                        logits,_ = model(input_ids, segment_ids, input_mask) 
+
+                    logits = logits.detach().cpu().numpy()
+                    label_ids = label_ids.to('cpu').numpy()
+                    tmp_dev_accuracy = accuracy(logits, label_ids)
+                    dev_accuracy += tmp_dev_accuracy
+                    nb_dev_examples += input_ids.size(0)
+                dev_accuracy /= float(nb_dev_examples)
+                print('Task loss this epoch: %f, domain loss %f, dev accuracy=%f' % (epoch_task_loss, epoch_dom_loss, dev_accuracy))
+                if epoch == 0 or dev_accuracy > best_dev_accuracy:
+                    best_dev_accuracy = dev_accuracy
+                    print("Writing model with best dev accuracy to date")
+
+                    # Save a trained model and the associated configuration
+                    model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
+                    output_model_file = os.path.join(args.output_dir, WEIGHTS_NAME)
+                    torch.save(model_to_save.state_dict(), output_model_file)
+                    output_config_file = os.path.join(args.output_dir, CONFIG_NAME)
+                    with open(output_config_file, 'w') as f:
+                        f.write(model_to_save.config.to_json_string())
+
+            # Load a trained model and config that you have fine-tuned
+            config = BertConfig(output_config_file)
+            model = BertForDomainAdversarialSequenceClassification(config, num_labels=num_labels)
+            model.load_state_dict(torch.load(output_model_file))
+        else:
+            model = BertForDomainAdversarialSequenceClassification.from_pretrained(args.bert_model, num_labels=num_labels)
+        model.to(device)
+    except:
+        print('Exiting training early due to exception')
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-        eval_examples = processor.get_dev_examples(args.data_dir)
+        #eval_examples = processor.get_dev_examples(args.data_dir)
+        # For this data, we are evaluating on ood data. dev is in-domain data used for model selectino
+        eval_examples = processor.get_ood_examples(args.data_dir)
         eval_features = convert_examples_to_features(
             eval_examples, label_list, args.max_seq_length, tokenizer, output_mode)
         logger.info("***** Running evaluation *****")

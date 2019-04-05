@@ -1,3 +1,7 @@
+from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel
+import torch
+import torch.nn as nn
+from torch.autograd import Function
 
 # the concepts here come from: https://github.com/fungtion/DANN/blob/master/models/model.py
 class ReverseLayerF(Function):
@@ -15,7 +19,7 @@ class ReverseLayerF(Function):
         # reversed (default)
         output = grad_output.neg() * ctx.alpha
         # print("Input grad is %s, output grad is %s" % (grad_output.data.cpu().numpy()[:10], output.data.cpu().numpy()[:10]))
-        return output
+        return output, None
 
 
 
@@ -78,7 +82,11 @@ class BertForDomainAdversarialSequenceClassification(BertPreTrainedModel):
         _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
-        grad_reverse_pooled = ReverseLayerF.apply(feature, alpha)
+        
+        # A second path through the network, this pass-forward layer to a domain predictor, 
+        # that then reverses gradients in the backwards step to confound the representation learner
+        # with respect to instance domain
+        grad_reverse_pooled = ReverseLayerF.apply(pooled_output, alpha)
         domain_pred = self.domain_classifier(grad_reverse_pooled)
 
         return logits, domain_pred
