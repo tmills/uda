@@ -962,7 +962,7 @@ def main():
                 model.eval() 
 
                 dev_features = convert_examples_to_features(
-                    dev_examples, label_list, args.max_seq_length, tokenizer)
+                    dev_examples, label_list, args.max_seq_length, tokenizer, output_mode)
                 logger.info("***** Running dev evaluation for epoch %d *****" % (epoch))
                 all_input_ids = torch.tensor([f.input_ids for f in dev_features], dtype=torch.long)
                 all_input_mask = torch.tensor([f.input_mask for f in dev_features], dtype=torch.long)
