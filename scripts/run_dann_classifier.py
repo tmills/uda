@@ -932,28 +932,31 @@ def main():
                     tr_loss += loss.item()
                     nb_tr_examples += input_ids.size(0)
                     nb_tr_steps += 1
+                    dom_loss_total += domain_loss.item()
+                    epoch_task_loss += task_loss.item()
+                    epoch_dom_loss += domain_loss.item()
+                    # if (step + 1) % args.gradient_accumulation_steps == 0:
+                    #     if args.fp16:
+                    #         optimizer.backward(loss)
+                    #     else:
+                    #         loss.backward()
+
+                    #     tr_loss += task_loss.item()
+                    #     dom_loss_total += domain_loss.item()
+                    #     epoch_task_loss += task_loss.item()
+                    #     epoch_dom_loss += domain_loss.item()
+                    #     nb_tr_examples += input_ids.size(0)
+                    #     nb_tr_steps += 1
                     if (step + 1) % args.gradient_accumulation_steps == 0:
                         if args.fp16:
-                            optimizer.backward(loss)
-                        else:
-                            loss.backward()
-
-                        tr_loss += task_loss.item()
-                        dom_loss_total += domain_loss.item()
-                        epoch_task_loss += task_loss.item()
-                        epoch_dom_loss += domain_loss.item()
-                        nb_tr_examples += input_ids.size(0)
-                        nb_tr_steps += 1
-                        if (step + 1) % args.gradient_accumulation_steps == 0:
-                            if args.fp16:
-                                # modify learning rate with special warm up BERT uses
-                                # if args.fp16 is False, BertAdam is used that handles this automatically
-                                lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_optimization_steps, args.warmup_proportion)
-                                for param_group in optimizer.param_groups:
-                                    param_group['lr'] = lr_this_step
-                            optimizer.step()
-                            optimizer.zero_grad()
-                            global_step += 1
+                            # modify learning rate with special warm up BERT uses
+                            # if args.fp16 is False, BertAdam is used that handles this automatically
+                            lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_optimization_steps, args.warmup_proportion)
+                            for param_group in optimizer.param_groups:
+                                param_group['lr'] = lr_this_step
+                        optimizer.step()
+                        optimizer.zero_grad()
+                        global_step += 1
        
                 # Eval model on dev set and print out progress so we know when to stop training 
                 model.eval() 
