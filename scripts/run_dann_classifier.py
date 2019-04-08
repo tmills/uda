@@ -34,7 +34,7 @@ from tqdm import tqdm, trange
 
 from torch.nn import CrossEntropyLoss, MSELoss
 from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import matthews_corrcoef, f1_score
+from sklearn.metrics import matthews_corrcoef, f1_score, accuracy_score
 
 from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 from pytorch_pretrained_bert.modeling import BertForSequenceClassification, BertConfig, WEIGHTS_NAME, CONFIG_NAME
@@ -265,6 +265,11 @@ class PolarityProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(
             self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+
+    def get_ood_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "ood.tsv")), "ood")
 
     def get_labels(self):
         """See base class."""
@@ -605,6 +610,8 @@ def compute_metrics(task_name, preds, labels):
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "wnli":
         return {"acc": simple_accuracy(preds, labels)}
+    elif task_name == 'polarity':
+        return acc_and_f1(preds, labels)
     else:
         raise KeyError(task_name)
 
@@ -717,7 +724,7 @@ def main():
         "mnli-mm": MnliMismatchedProcessor,
         "mrpc": MrpcProcessor,
         "sst-2": Sst2Processor,
-        "polarity": PolarityProcessor
+        "polarity": PolarityProcessor,
         "sts-b": StsbProcessor,
         "qqp": QqpProcessor,
         "qnli": QnliProcessor,
@@ -856,82 +863,97 @@ def main():
     global_step = 0
     nb_tr_steps = 0
     tr_loss = 0
-    if args.do_train:
-        train_features = convert_examples_to_features(
-            train_examples, label_list, args.max_seq_length, tokenizer, output_mode)
-        logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(train_examples))
-        logger.info("  Batch size = %d", args.train_batch_size)
-        logger.info("  Num steps = %d", num_train_optimization_steps)
-        all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
-
-        if output_mode == "classification":
+    best_dev_accuracy = 0
+    try:
+        if args.do_train:
+            train_features = convert_examples_to_features(
+                train_examples, label_list, args.max_seq_length, tokenizer, output_mode)
+            logger.info("***** Running training *****")
+            logger.info("  Num examples = %d", len(train_examples))
+            logger.info("  Batch size = %d", args.train_batch_size)
+            logger.info("  Num steps = %d", num_train_optimization_steps)
+            all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
+            all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
+            all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
             all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
-        elif output_mode == "regression":
-            all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.float)
+            all_domain_ids = torch.tensor([f.domain for f in train_features], dtype=torch.int)
 
-        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-        if args.local_rank == -1:
-            train_sampler = RandomSampler(train_data)
-        else:
-            train_sampler = DistributedSampler(train_data)
-        train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
+            if output_mode == "classification":
+                all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
+            elif output_mode == "regression":
+                all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.float)
 
-        model.train()
-        for _ in trange(int(args.num_train_epochs), desc="Epoch"):
-            tr_loss = 0
-            nb_tr_examples, nb_tr_steps = 0, 0
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
-                batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, label_ids = batch
+            train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_domain_ids)
 
-                # define a new function to compute loss values for both output_modes
-                logits = model(input_ids, segment_ids, input_mask, labels=None)
+            if args.local_rank == -1:
+                train_sampler = RandomSampler(train_data)
+            else:
+                train_sampler = DistributedSampler(train_data)
+            train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
 
-                if output_mode == "classification":
-                    loss_fct = CrossEntropyLoss()
-                    loss = loss_fct(logits.view(-1, num_labels), label_ids.view(-1))
-                elif output_mode == "regression":
-                    loss_fct = MSELoss()
-                    loss = loss_fct(logits.view(-1), label_ids.view(-1))
+            model.train()
+            for epoch in trange(int(args.num_train_epochs), desc="Epoch"):
+                tr_loss = 0
+                dom_loss_total = 0
+                nb_tr_examples, nb_tr_steps = 0, 0
+                epoch_task_loss = 0
+                epoch_dom_loss = 0
+                for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+                    batch = tuple(t.to(device) for t in batch)
+                    input_ids, input_mask, segment_ids, label_ids, domain_ids = batch
 
-                if n_gpu > 1:
-                    loss = loss.mean() # mean() to average on multi-gpu.
-                if args.gradient_accumulation_steps > 1:
-                    loss = loss / args.gradient_accumulation_steps
+                    # define a new function to compute loss values for both output_modes
+                    task_preds, domain_preds = model(input_ids, segment_ids, input_mask)
+                    task_inds = np.where( domain_ids.to('cpu').numpy() == 0)[0]
 
-                if args.fp16:
-                    optimizer.backward(loss)
-                else:
-                    loss.backward()
+                    if output_mode == "classification":
+                        loss_fct = CrossEntropyLoss()
+                        task_loss = loss_fct(task_preds[task_inds].view(-1, num_labels), label_ids[task_inds].view(-1))
+                    elif output_mode == "regression":
+                        loss_fct = MSELoss()
+                        task_loss = loss_fct(task_preds[task_inds].view(-1), label_ids[task_inds].view(-1))
 
-                tr_loss += loss.item()
-                nb_tr_examples += input_ids.size(0)
-                nb_tr_steps += 1
-                if (step + 1) % args.gradient_accumulation_steps == 0:
+                    # We only compute task loss on the in-domain set, those for which domain_id = 0
+                    # task_loss = loss_fn(task_preds[task_inds].view(-1, num_labels), label_ids[task_inds].view(-1))
+                    # Compute domain loss on everything.
+                    domain_loss = domain_loss_fn(domain_preds.view(-1), domain_ids.float())
+                    loss = task_loss + args.domain_loss_weight * domain_loss
+
+                    if n_gpu > 1:
+                        loss = loss.mean() # mean() to average on multi-gpu.
+                    if args.gradient_accumulation_steps > 1:
+                        loss = loss / args.gradient_accumulation_steps
+
                     if args.fp16:
                         optimizer.backward(loss)
                     else:
                         loss.backward()
 
-                    tr_loss += task_loss.item()
-                    dom_loss_total += domain_loss.item()
-                    epoch_task_loss += task_loss.item()
-                    epoch_dom_loss += domain_loss.item()
+                    tr_loss += loss.item()
                     nb_tr_examples += input_ids.size(0)
                     nb_tr_steps += 1
                     if (step + 1) % args.gradient_accumulation_steps == 0:
                         if args.fp16:
-                            # modify learning rate with special warm up BERT uses
-                            # if args.fp16 is False, BertAdam is used that handles this automatically
-                            lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_optimization_steps, args.warmup_proportion)
-                            for param_group in optimizer.param_groups:
-                                param_group['lr'] = lr_this_step
-                        optimizer.step()
-                        optimizer.zero_grad()
-                        global_step += 1
+                            optimizer.backward(loss)
+                        else:
+                            loss.backward()
+
+                        tr_loss += task_loss.item()
+                        dom_loss_total += domain_loss.item()
+                        epoch_task_loss += task_loss.item()
+                        epoch_dom_loss += domain_loss.item()
+                        nb_tr_examples += input_ids.size(0)
+                        nb_tr_steps += 1
+                        if (step + 1) % args.gradient_accumulation_steps == 0:
+                            if args.fp16:
+                                # modify learning rate with special warm up BERT uses
+                                # if args.fp16 is False, BertAdam is used that handles this automatically
+                                lr_this_step = args.learning_rate * warmup_linear(global_step/num_train_optimization_steps, args.warmup_proportion)
+                                for param_group in optimizer.param_groups:
+                                    param_group['lr'] = lr_this_step
+                            optimizer.step()
+                            optimizer.zero_grad()
+                            global_step += 1
        
                 # Eval model on dev set and print out progress so we know when to stop training 
                 model.eval() 
@@ -1016,6 +1038,7 @@ def main():
         model.eval()
         eval_loss = 0
         nb_eval_steps = 0
+        nb_eval_examples = 0
         preds = []
 
         for input_ids, input_mask, segment_ids, label_ids in tqdm(eval_dataloader, desc="Evaluating"):
@@ -1025,25 +1048,32 @@ def main():
             label_ids = label_ids.to(device)
 
             with torch.no_grad():
-                logits = model(input_ids, segment_ids, input_mask, labels=None)
+                logits,_ = model(input_ids, segment_ids, input_mask)
 
+            
             # create eval loss and other metric required by the task
             if output_mode == "classification":
                 loss_fct = CrossEntropyLoss()
                 tmp_eval_loss = loss_fct(logits.view(-1, num_labels), label_ids.view(-1))
+                label_ids = label_ids.to('cpu').numpy()
+                logits = logits.detach().cpu().numpy()
+                # tmp_eval_accuracy = simple_accuracy(logits, label_ids)
             elif output_mode == "regression":
                 loss_fct = MSELoss()
                 tmp_eval_loss = loss_fct(logits.view(-1), label_ids.view(-1))
             
-            eval_loss += tmp_eval_loss.mean().item()
+            # eval_accuracy += tmp_eval_accuracy
+            nb_eval_examples += input_ids.size(0)
+
             nb_eval_steps += 1
             if len(preds) == 0:
-                preds.append(logits.detach().cpu().numpy())
+                preds.append(logits)
             else:
                 preds[0] = np.append(
-                    preds[0], logits.detach().cpu().numpy(), axis=0)
+                    preds[0], logits, axis=0)
 
-        eval_loss = eval_loss / nb_eval_steps
+        #eval_loss = eval_loss / nb_eval_steps
+        # eval_accuracy = eval_accuracy / nb_eval_examples
         preds = preds[0]
         if output_mode == "classification":
             preds = np.argmax(preds, axis=1)
@@ -1051,10 +1081,12 @@ def main():
             preds = np.squeeze(preds)
         result = compute_metrics(task_name, preds, all_label_ids.numpy())
         loss = tr_loss/nb_tr_steps if args.do_train else None
+        dom_loss = dom_loss_total / nb_tr_steps if args.do_train else None
 
         result['eval_loss'] = eval_loss
         result['global_step'] = global_step
         result['loss'] = loss
+        result['domain_loss'] = dom_loss
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
