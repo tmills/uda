@@ -23,6 +23,7 @@ import logging
 import os
 import random
 import sys
+import traceback
 
 import numpy as np
 import torch
@@ -935,18 +936,7 @@ def main():
                     dom_loss_total += domain_loss.item()
                     epoch_task_loss += task_loss.item()
                     epoch_dom_loss += domain_loss.item()
-                    # if (step + 1) % args.gradient_accumulation_steps == 0:
-                    #     if args.fp16:
-                    #         optimizer.backward(loss)
-                    #     else:
-                    #         loss.backward()
 
-                    #     tr_loss += task_loss.item()
-                    #     dom_loss_total += domain_loss.item()
-                    #     epoch_task_loss += task_loss.item()
-                    #     epoch_dom_loss += domain_loss.item()
-                    #     nb_tr_examples += input_ids.size(0)
-                    #     nb_tr_steps += 1
                     if (step + 1) % args.gradient_accumulation_steps == 0:
                         if args.fp16:
                             # modify learning rate with special warm up BERT uses
@@ -976,7 +966,7 @@ def main():
                 model.eval()
                 dev_loss, dev_accuracy = 0, 0
                 nb_eval_steps, nb_dev_examples = 0, 0
-
+                preds = []
                 for input_ids, input_mask, segment_ids, label_ids in tqdm(dev_dataloader, desc="Evaluating"):
                     input_ids = input_ids.to(device)
                     input_mask = input_mask.to(device)
@@ -986,12 +976,32 @@ def main():
                     with torch.no_grad():
                         logits,_ = model(input_ids, segment_ids, input_mask) 
 
-                    logits = logits.detach().cpu().numpy()
-                    label_ids = label_ids.to('cpu').numpy()
-                    tmp_dev_accuracy = accuracy(logits, label_ids)
-                    dev_accuracy += tmp_dev_accuracy
+                    if output_mode == "classification":
+                        loss_fct = CrossEntropyLoss()
+                        tmp_dev_loss = loss_fct(logits.view(-1, num_labels), label_ids.view(-1))
+                    elif output_mode == "regression":
+                        loss_fct = MSELoss()
+                        tmp_dev_loss = loss_fct(logits.view(-1), label_ids.view(-1))
+
+                    # logits = logits.detach().cpu().numpy()
+                    # label_ids = label_ids.to('cpu').numpy()
+                    # tmp_dev_accuracy = accuracy(logits, label_ids)
+                    # dev_accuracy += tmp_dev_accuracy
                     nb_dev_examples += input_ids.size(0)
-                dev_accuracy /= float(nb_dev_examples)
+                    if len(preds) == 0:
+                        preds.append(logits.detach().cpu().numpy())
+                    else:
+                        preds[0] = np.append(
+                            preds[0], logits.detach().cpu().numpy(), axis=0)
+
+                preds = preds[0]
+                if output_mode == "classification":
+                    preds = np.argmax(preds, axis=1)
+                elif output_mode == "regression":
+                    preds = np.squeeze(preds)
+                result = compute_metrics(task_name, preds, all_label_ids.numpy())
+                dev_accuracy = result['acc']
+
                 print('Task loss this epoch: %f, domain loss %f, dev accuracy=%f' % (epoch_task_loss, epoch_dom_loss, dev_accuracy))
                 if epoch == 0 or dev_accuracy > best_dev_accuracy:
                     best_dev_accuracy = dev_accuracy
@@ -1014,6 +1024,7 @@ def main():
         model.to(device)
     except:
         print('Exiting training early due to exception')
+        traceback.print_exec()
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         #eval_examples = processor.get_dev_examples(args.data_dir)
