@@ -285,8 +285,9 @@ class PolarityProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, i)
             label = str(-1 * int(line[0]))
             text_a = line[1]
+            domain = 1 if set_type == 'ood' else 0
             examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+                InputExample(guid=guid, text_a=text_a, text_b=None, label=label, domain=domain))
         return examples
 
 class StsbProcessor(DataProcessor):
@@ -1024,7 +1025,7 @@ def main():
         model.to(device)
     except:
         print('Exiting training early due to exception')
-        traceback.print_exec()
+        traceback.print_exc()
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         #eval_examples = processor.get_dev_examples(args.data_dir)
